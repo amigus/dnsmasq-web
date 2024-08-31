@@ -1,0 +1,67 @@
+name: Create Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+      - uses: actions/checkout@v4
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: "go.mod"
+
+      - name: Build
+        env:
+          GOOS: linux
+          GOARCH: amd64
+          CGO_ENABLED: 0
+        run: |
+          go -buildmode=pie build
+
+      - name: Create checksums
+        run: |
+          shasum -a 256 *-${{ github.ref_name }}_*_* >| checksums.txt
+          file *-${{ github.ref_name }}_*_* checksums.txt
+
+      - name: Sign checksums
+        run: |
+          GPG_TTY=$(tty) gpg -vvv --batch --yes --detach-sign --armor \
+            --local-user "${{ secrets.GPG_FINGERPRINT }}" \
+            --output checksums.txt.sig \
+            --passphrase "${{ secrets.GPG_PASSPHRASE }}" \
+            --pinentry-mode loopback checksums.txt
+
+      - name: Create release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --title "${{ github.ref_name }}" \
+            --repo "${{ github.repository }}" \
+            --generate-notes
+
+      - name: Upload artifacts
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.ref_name }}" \
+            --repo "${{ github.repository }}" \
+            *-${{ github.ref_name }}_*_* \
+            checksums.txt checksums.txt.sig
+
+
+
+
+
