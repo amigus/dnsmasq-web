@@ -1,4 +1,4 @@
-name: Create Release
+name: Release
 
 on:
   push:
@@ -9,36 +9,65 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  cgo-build:
+    strategy:
+      matrix:
+        targets:
+          - 'linux-amd64'
+          - 'linux-amd64-musl'
+          - 'linux-arm-7'
+    name: Build Binaries
     runs-on: ubuntu-latest
+
     steps:
-      - uses: crazy-max/ghaction-import-gpg@v6
-        with:
-          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
-          passphrase: ${{ secrets.GPG_PASSPHRASE }}
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: "go.mod"
+          go-version: '1.22'
 
-      - name: Build
-        env:
-          GOOS: linux
-          GOARCH: amd64
-          CGO_ENABLED: 0
-        run: |
-          go -buildmode=pie build
+      - name: Build go program
+        id: cgo-action
+        uses: go-cross/cgo-actions@v1
+        with:
+          targets: ${{ matrix.targets }}
+          output: $repo-${{ github.ref_name }}_$target$ext
 
+      - run: echo "${{ steps.cgo-action.outputs.files }}"
+
+      - name: Upload Release Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: binaries
+          path: |
+            bin/*-${{ github.ref_name }}_*
+
+  release:
+    name: Create Release
+    needs: cgo-build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Import GPG key
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: binaries
+    
       - name: Create checksums
         run: |
-          shasum -a 256 *-${{ github.ref_name }}_*_* >| checksums.txt
-          file *-${{ github.ref_name }}_*_* checksums.txt
+          shasum -a 256 *-${{ github.ref_name }}_* >| checksums.txt
+          file *-${{ github.ref_name }}_* checksums.txt
 
       - name: Sign checksums
         run: |
           GPG_TTY=$(tty) gpg -vvv --batch --yes --detach-sign --armor \
-            --local-user "${{ secrets.GPG_FINGERPRINT }}" \
             --output checksums.txt.sig \
             --passphrase "${{ secrets.GPG_PASSPHRASE }}" \
             --pinentry-mode loopback checksums.txt
@@ -58,7 +87,7 @@ jobs:
         run: |
           gh release upload "${{ github.ref_name }}" \
             --repo "${{ github.repository }}" \
-            *-${{ github.ref_name }}_*_* \
+            *-${{ github.ref_name }}_* \
             checksums.txt checksums.txt.sig
 
 
