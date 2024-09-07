@@ -34,12 +34,12 @@ func main() {
 	flag.IntVar(&maxDays, "m", 0, "the maximum number of days of requests to query (< 1 means no limit)")
 	flag.StringVar(&subnet, "s", "192.168.0.0/16", "the subnet of in scope devices")
 	flag.StringVar(&groupFlag, "g", "", "group to run the process as (requires root)")
-	flag.StringVar(&pidFilePath, "P", fmt.Sprintf("/run/%s.pid", name), "the PID file path")
-	flag.StringVar(&unixSocketPath, "S", fmt.Sprintf("/run/%s.sock", name), "the Unix domain socket path")
+	flag.StringVar(&pidFilePath, "P", fmt.Sprintf("/run/%s.pid", name), "the PID file")
+	flag.StringVar(&unixSocketPath, "S", fmt.Sprintf("/run/%s.sock", name), "the Unix domain socket")
 	flag.StringVar(&userFlag, "u", "", "user to run the process as (requires root)")
-	flag.IntVar(&maxTokens, "token-max", 1, "the maximum number of tokens to issue")
-	flag.IntVar(&maxTokenUses, "token-uses", 0, "the maximum number of times a token can be used (the default 0 means unlimited)")
-	flag.DurationVar(&tokenTimeout, "token-timeout", time.Duration(0), "the duration a token is valid (the default 0 means forever)")
+	flag.IntVar(&maxTokens, "T", 1, "the maximum number of tokens to issue at a time (0 disables token checking)")
+	flag.IntVar(&maxTokenUses, "c", 0, "the maximum number of times a token can be used (the default 0 means unlimited)")
+	flag.DurationVar(&tokenTimeout, "t", time.Duration(0), "the duration a token is valid (the default 0 means forever)")
 	flag.Usage = func() {
 		fmt.Fprintf(
 			flag.CommandLine.Output(), `Dnsmasq Lease Database Web Server
@@ -50,7 +50,7 @@ Options:
 	[-f database] [-h host-dir] [-l address] [-m days] [-s subnet]
 Daemonize Options:
 	[-u user] [-g group]
-	[-token-max n] [-token-uses n] [-token-timeout duration]
+	[-T max-tokens] [-c max-uses] [-t timeout]
 	[-P path] [-S path ]
 
 `,
@@ -211,16 +211,20 @@ Using the -u and -g flags to drop root privilege after opening the port is recom
 		}
 
 		if os.Getenv("LISTENER_ON") != "" {
+			r := gin.Default()
 			// Use the token checker when running as a daemon
 			ttc := NewTokenChecker(maxTokens, maxTokenUses, tokenTimeout)
-			r := DhcpHostDir(LeaseDatabase(TokenCheckerHeader(gin.Default(), ttc, "X-Token"), gormDb, maxDays, subnet), hostDirPath)
-			go func() {
-				// Serve the TokenPublisher over a Unix domain socket
-				if err := TokenCheckerPublisher(gin.Default(), ttc).RunFd(4); err != nil {
-					fmt.Fprintf(os.Stderr, "unable to serve on unix socket: %v\n", err)
-					os.Exit(1)
-				}
-			}()
+			if maxTokens > 0 {
+				r = TokenCheckerHeader(r, ttc, "X-Token")
+				go func() {
+					// Serve the TokenPublisher over a Unix domain socket
+					if err := TokenCheckerPublisher(gin.Default(), ttc).RunFd(4); err != nil {
+						fmt.Fprintf(os.Stderr, "unable to serve on unix socket: %v\n", err)
+						os.Exit(1)
+					}
+				}()
+			}
+			r = DhcpHostDir(LeaseDatabase(r, gormDb, maxDays, subnet), hostDirPath)
 			// Gin defaults to DebugMode so set this explicitly
 			gin.SetMode(gin.ReleaseMode)
 			// Run on the open socket; 3 because 0, 1 and 2 are stdin, stdout and stderr
@@ -229,7 +233,9 @@ Using the -u and -g flags to drop root privilege after opening the port is recom
 			}
 		} else {
 			// Run without -d and not as the child process, i.e., running in the foreground
-			if err := DhcpHostDir(LeaseDatabase(gin.Default(), gormDb, maxDays, subnet), hostDirPath).Run(listeningOn); err != nil {
+			if err := DhcpHostDir(
+				LeaseDatabase(gin.Default(), gormDb, maxDays, subnet), hostDirPath,
+			).Run(listeningOn); err != nil {
 				fmt.Fprintf(os.Stderr, "unable to listen on '%s': %v\n", listeningOn, err)
 			}
 		}
