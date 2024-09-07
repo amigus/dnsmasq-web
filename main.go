@@ -22,13 +22,14 @@ import (
 func main() {
 	name := filepath.Base(os.Args[0])
 
-	var databaseFilePath, listeningOn, pidFilePath, unixSocketPath, subnet, userFlag, groupFlag string
+	var databaseFilePath, hostDirPath, listeningOn, pidFilePath, unixSocketPath, subnet, userFlag, groupFlag string
 	var daemonize bool
 	var maxDays, maxTokens, maxTokenUses int
 	var tokenTimeout time.Duration
 
 	flag.BoolVar(&daemonize, "d", false, "fork and run as a daemon")
-	flag.StringVar(&databaseFilePath, "f", "/var/lib/misc/dnsmasq.leases.db", "the SQLite database file path")
+	flag.StringVar(&databaseFilePath, "f", "/var/lib/misc/dnsmasq.leases.db", "the SQLite database file")
+	flag.StringVar(&hostDirPath, "h", "/var/lib/misc/dnsmasq.reservations.d", "the reservations files directory")
 	flag.StringVar(&listeningOn, "l", ":8080", "the IP address and port to listen on")
 	flag.IntVar(&maxDays, "m", 0, "the maximum number of days of requests to query (< 1 means no limit)")
 	flag.StringVar(&subnet, "s", "192.168.0.0/16", "the subnet of in scope devices")
@@ -46,7 +47,7 @@ Provides a RESTful API to query the the lease database maintained by dnsmasq.
 
 Usage: %s [options] [-d [daemonize options]]
 Options:
-	[-f database] [-l address] [-m days] [-s subnet]
+	[-f database] [-h host-dir] [-l address] [-m days] [-s subnet]
 Daemonize Options:
 	[-u user] [-g group]
 	[-token-max n] [-token-uses n] [-token-timeout duration]
@@ -63,6 +64,17 @@ Using the -u and -g flags to drop root privilege after opening the port is recom
 		)
 	}
 	flag.Parse()
+
+	hostDir, err := os.Stat(hostDirPath)
+	if err != nil {
+		if os.IsNotExist(err) && !daemonize {
+			fmt.Fprintf(os.Stderr, "unable to stat host directory: %v\n", err)
+			os.Exit(1)
+		}
+	} else if !hostDir.IsDir() {
+		fmt.Fprintf(os.Stderr, "host directory is not a directory: %s\n", hostDirPath)
+		os.Exit(1)
+	}
 
 	if daemonize {
 		// cmd is the background (child) process this (parent) process will start then exit
@@ -93,6 +105,13 @@ Using the -u and -g flags to drop root privilege after opening the port is recom
 			fmt.Fprintf(os.Stderr, "unable to open socket: %v\n", err)
 			os.Exit(1)
 		}
+		// Create the host directory if it doesn't exist
+		if hostDir == nil {
+			if err := os.Mkdir(hostDirPath, 0750); err != nil {
+				fmt.Fprintf(os.Stderr, "unable to create host directory: %v\n", err)
+				os.Exit(1)
+			}
+		}
 		// Set the user and group for the child process, i.e., drop root privileges
 		if userFlag != "" || groupFlag != "" {
 			cmd.SysProcAttr.Credential = &syscall.Credential{}
@@ -101,6 +120,10 @@ Using the -u and -g flags to drop root privilege after opening the port is recom
 				if usr, err := user.Lookup(userFlag); err == nil {
 					if uid, err := strconv.Atoi(usr.Uid); err == nil {
 						cmd.SysProcAttr.Credential.Uid = uint32(uid)
+						if hostDir == nil {
+							// Change the owner of the host directory if it was created
+							os.Chown(hostDirPath, uid, -1)
+						}
 					} else {
 						fmt.Fprintf(os.Stderr, "invalid UID for user %s: %v\n", userFlag, err)
 						os.Exit(1)
@@ -114,6 +137,9 @@ Using the -u and -g flags to drop root privilege after opening the port is recom
 				if grp, err := user.LookupGroup(groupFlag); err == nil {
 					if gid, err := strconv.Atoi(grp.Gid); err == nil {
 						cmd.SysProcAttr.Credential.Gid = uint32(gid)
+						if hostDir == nil {
+							os.Chown(hostDirPath, -1, gid)
+						}
 					} else {
 						fmt.Fprintf(os.Stderr, "invalid GID for group %s: %v\n", groupFlag, err)
 						os.Exit(1)
@@ -124,22 +150,25 @@ Using the -u and -g flags to drop root privilege after opening the port is recom
 				}
 			}
 		}
-		// Remove the old UNIX domain socket if it still exists
-		if err := os.Remove(unixSocketPath); err != nil && !os.IsNotExist(err) {
-			fmt.Fprintf(os.Stderr, "unable to remove unix socket: %v\n", err)
-			os.Exit(1)
-		}
-		// Create a new UNIX domain socket for the child process in its place
-		if listener, err := net.Listen("unix", unixSocketPath); err == nil {
-			if file, err := listener.(*net.UnixListener).File(); err == nil {
-				cmd.ExtraFiles = append(cmd.ExtraFiles, file)
-			} else {
-				fmt.Fprintf(os.Stderr, "unable to get unix socket file: %v\n", err)
+		// If token checking is enabled, set up the UNIX domain socket to host the TokenPublisher
+		if maxTokens > 0 {
+			// Remove the old UNIX domain socket if it still exists
+			if err := os.Remove(unixSocketPath); err != nil && !os.IsNotExist(err) {
+				fmt.Fprintf(os.Stderr, "unable to remove unix socket: %v\n", err)
 				os.Exit(1)
 			}
-		} else {
-			fmt.Fprintf(os.Stderr, "unable to listen on unix socket: %v\n", err)
-			os.Exit(1)
+			// Create a new UNIX domain socket for the child process in its place
+			if listener, err := net.Listen("unix", unixSocketPath); err == nil {
+				if file, err := listener.(*net.UnixListener).File(); err == nil {
+					cmd.ExtraFiles = append(cmd.ExtraFiles, file)
+				} else {
+					fmt.Fprintf(os.Stderr, "unable to get unix socket file: %v\n", err)
+					os.Exit(1)
+				}
+			} else {
+				fmt.Fprintf(os.Stderr, "unable to listen on unix socket: %v\n", err)
+				os.Exit(1)
+			}
 		}
 		// Start the child process in the background
 		if err := cmd.Start(); err != nil {
@@ -184,7 +213,7 @@ Using the -u and -g flags to drop root privilege after opening the port is recom
 		if os.Getenv("LISTENER_ON") != "" {
 			// Use the token checker when running as a daemon
 			ttc := NewTokenChecker(maxTokens, maxTokenUses, tokenTimeout)
-			r := LeaseDatabase(TokenCheckerHeader(gin.Default(), ttc, "X-Token"), gormDb, maxDays, subnet)
+			r := DhcpHostDir(LeaseDatabase(TokenCheckerHeader(gin.Default(), ttc, "X-Token"), gormDb, maxDays, subnet), hostDirPath)
 			go func() {
 				// Serve the TokenPublisher over a Unix domain socket
 				if err := TokenCheckerPublisher(gin.Default(), ttc).RunFd(4); err != nil {
@@ -200,7 +229,7 @@ Using the -u and -g flags to drop root privilege after opening the port is recom
 			}
 		} else {
 			// Run without -d and not as the child process, i.e., running in the foreground
-			if err := LeaseDatabase(gin.Default(), gormDb, maxDays, subnet).Run(listeningOn); err != nil {
+			if err := DhcpHostDir(LeaseDatabase(gin.Default(), gormDb, maxDays, subnet), hostDirPath).Run(listeningOn); err != nil {
 				fmt.Fprintf(os.Stderr, "unable to listen on '%s': %v\n", listeningOn, err)
 			}
 		}
