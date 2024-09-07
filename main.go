@@ -19,31 +19,43 @@ import (
 	"gorm.io/gorm"
 )
 
-func main() {
-	name := filepath.Base(os.Args[0])
+const (
+	defaultDatabaseFile    = "dnsmasq.leases.db"
+	defaultReservationsDir = "dnsmasq.reservations.d"
+	defaultListenOn        = ":8080"
+	defaultPidFile         = "dnsmasq-web.pid"
+	defaultUnixSocket      = "dnsmasq-web.sock"
+	defaultSubnetCIDR      = "192.168.0.0/16"
+	runPath                = "/run"
+	listenerEnvVar         = "LISTENER_ON"
+	tokenHeader            = "X-Token"
+	tokenEndpointPath      = "/"
+	varLibMiscPath         = "/var/lib/misc"
+)
 
-	var databaseFilePath, hostDirPath, listeningOn, pidFilePath, unixSocketPath, subnet, userFlag, groupFlag string
+func main() {
+	var databaseFilePath, hostDirPath, listenOn, pidFilePath, unixSocketPath, subnet, userFlag, groupFlag string
 	var daemonize bool
 	var maxDays, maxTokens, maxTokenUses int
 	var tokenTimeout time.Duration
 
 	flag.BoolVar(&daemonize, "d", false, "fork and run as a daemon")
-	flag.StringVar(&databaseFilePath, "f", "/var/lib/misc/dnsmasq.leases.db", "the SQLite database file")
-	flag.StringVar(&hostDirPath, "h", "/var/lib/misc/dnsmasq.reservations.d", "the reservations files directory")
-	flag.StringVar(&listeningOn, "l", ":8080", "the IP address and port to listen on")
+	flag.StringVar(&databaseFilePath, "f", fmt.Sprintf("%s/%s", varLibMiscPath, defaultDatabaseFile), "the SQLite database file")
+	flag.StringVar(&hostDirPath, "h", fmt.Sprintf("%s/%s", varLibMiscPath, defaultReservationsDir), "the reservations files directory")
+	flag.StringVar(&listenOn, "l", defaultListenOn, "the IP address and port to listen on")
 	flag.IntVar(&maxDays, "m", 0, "the maximum number of days of requests to query (< 1 means no limit)")
-	flag.StringVar(&subnet, "s", "192.168.0.0/16", "the subnet of in scope devices")
+	flag.StringVar(&subnet, "s", defaultSubnetCIDR, "the subnet of in scope devices")
 	flag.StringVar(&groupFlag, "g", "", "group to run the process as (requires root)")
-	flag.StringVar(&pidFilePath, "P", fmt.Sprintf("/run/%s.pid", name), "the PID file")
-	flag.StringVar(&unixSocketPath, "S", fmt.Sprintf("/run/%s.sock", name), "the Unix domain socket")
+	flag.StringVar(&pidFilePath, "P", fmt.Sprintf("%s/%s", runPath, defaultPidFile), "the PID file")
+	flag.StringVar(&unixSocketPath, "S", fmt.Sprintf("%s/%s", runPath, defaultUnixSocket), "the Unix domain socket")
 	flag.StringVar(&userFlag, "u", "", "user to run the process as (requires root)")
 	flag.IntVar(&maxTokens, "T", 1, "the maximum number of tokens to issue at a time (0 disables token checking)")
 	flag.IntVar(&maxTokenUses, "c", 0, "the maximum number of times a token can be used (the default 0 means unlimited)")
 	flag.DurationVar(&tokenTimeout, "t", time.Duration(0), "the duration a token is valid (the default 0 means forever)")
 	flag.Usage = func() {
 		fmt.Fprintf(
-			flag.CommandLine.Output(), `Dnsmasq Lease Database Web Server
-Provides a RESTful API to query the the lease database maintained by dnsmasq.
+			flag.CommandLine.Output(), `
+Dnsmasq Web is a JSON/HTTP interface for Dnsmasq.
 
 Usage: %s [options] [-d [daemonize options]]
 Options:
@@ -54,12 +66,13 @@ Daemonize Options:
 	[-P path] [-S path ]
 
 `,
-			name,
+			filepath.Base(os.Args[0]),
 		)
 		flag.PrintDefaults()
 		fmt.Fprint(flag.CommandLine.Output(), `
 Listening on ports below 1024, e.g., -l ":80" requires root privileges.
 Using the -u and -g flags to drop root privilege after opening the port is recommended.
+Setting -T 0 disables token checking which is not recommended.
 `,
 		)
 	}
@@ -72,7 +85,7 @@ Using the -u and -g flags to drop root privilege after opening the port is recom
 			os.Exit(1)
 		}
 	} else if !hostDir.IsDir() {
-		fmt.Fprintf(os.Stderr, "host directory is not a directory: %s\n", hostDirPath)
+		fmt.Fprintf(os.Stderr, "host-dir is not a directory: %s\n", hostDirPath)
 		os.Exit(1)
 	}
 
@@ -92,10 +105,10 @@ Using the -u and -g flags to drop root privilege after opening the port is recom
 			}
 		}
 		// Start listening on the port and pass the descriptor to it
-		if listener, err := net.Listen("tcp", listeningOn); err == nil {
+		if listener, err := net.Listen("tcp", listenOn); err == nil {
 			// There's no .Close() because this process will exit with the listener open
 			if file, err := listener.(*net.TCPListener).File(); err == nil {
-				cmd.Env = append(cmd.Env, "LISTENER_ON="+file.Name())
+				cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", listenerEnvVar, file.Name()))
 				cmd.ExtraFiles = []*os.File{file}
 			} else {
 				fmt.Fprintf(os.Stderr, "unable to get listener file: %v\n", err)
@@ -210,15 +223,15 @@ Using the -u and -g flags to drop root privilege after opening the port is recom
 			os.Exit(1)
 		}
 
-		if os.Getenv("LISTENER_ON") != "" {
+		if os.Getenv(listenerEnvVar) != "" {
 			r := gin.Default()
 			// Use the token checker when running as a daemon
 			ttc := NewTokenChecker(maxTokens, maxTokenUses, tokenTimeout)
 			if maxTokens > 0 {
-				r = TokenCheckerHeader(r, ttc, "X-Token")
+				r = TokenCheckerHeader(r, ttc, tokenHeader)
 				go func() {
 					// Serve the TokenPublisher over a Unix domain socket
-					if err := TokenCheckerPublisher(gin.Default(), ttc).RunFd(4); err != nil {
+					if err := TokenCheckerPublisher(gin.Default(), ttc, tokenEndpointPath).RunFd(4); err != nil {
 						fmt.Fprintf(os.Stderr, "unable to serve on unix socket: %v\n", err)
 						os.Exit(1)
 					}
@@ -235,8 +248,8 @@ Using the -u and -g flags to drop root privilege after opening the port is recom
 			// Run without -d and not as the child process, i.e., running in the foreground
 			if err := DhcpHostDir(
 				LeaseDatabase(gin.Default(), gormDb, maxDays, subnet), hostDirPath,
-			).Run(listeningOn); err != nil {
-				fmt.Fprintf(os.Stderr, "unable to listen on '%s': %v\n", listeningOn, err)
+			).Run(listenOn); err != nil {
+				fmt.Fprintf(os.Stderr, "unable to listen on '%s': %v\n", listenOn, err)
 			}
 		}
 		os.Exit(1)
