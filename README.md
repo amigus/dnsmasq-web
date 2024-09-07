@@ -1,17 +1,84 @@
-# DNSMASQ Database Web
+# Dnsmasq Web
 
-A RESTful Web API for
-[DNSMASQ Lease Database](https://gist.github.com/amigus/6a9e4151d175d04bf05337b815f2213e).
+[![Release](https://github.com/amigus/dnsmasq-web/actions/workflows/release.yml/badge.svg)](https://github.com/amigus/dnsmasq-web/actions/workflows/release.yml)
+[![Run Tests](https://github.com/amigus/dnsmasq-web/actions/workflows/test.yml/badge.svg)](https://github.com/amigus/dnsmasq-web/actions/workflows/test.yml)
 
-It has 5 methods:
+A JSON/HTTP interface for Dnsmasq.
+It makes it easy to maintain DHCP reservations and query client, lease and request information easily over HTTP.
+It stores the client, lease and request information in an
+[SQLite](https://www.sqlite.org/index.html)
+[database](https://gist.github.com/amigus/6a9e4151d175d04bf05337b815f2213e).
 
-1. GET /leases
-1. GET /clients[?since=YYYY-mm-dd]
-1. GET /addresses/_mac_
-1. GET /devices/_ip_
-1. GET /requests?cidr=_cidr_ or /requests?range=_range_
+It leverages the `dhcp-script` and `dhcp-hostsdir` configuration options of Dnsmasq.
+The `dhcp-script` maintains the database it queries.
+It also maintains reservations files in the `dhcp-hostsdir` directory.
 
-## Leases
+## Installation
+
+1. Add the [database](https://gist.github.com/amigus/6a9e4151d175d04bf05337b815f2213e) to the DHCP server.
+1. Download the appropriate binary from the [releases](https://github.com/amigus/dnsmasq-web/releases/latest) page to the DHCP server.
+1. Run it, e.g., `dnsmasq-web` or as a daemon with `sudo dnsmasq-web -d -l :80 -T 0`.
+
+## Endpoints
+
+| Endpoint       | Method | Query Parameter         | Required | Description                                      |
+|----------------|--------|-------------------------|----------|--------------------------------------------------|
+| **/reservations** |     |                         |          |                                                  |
+|                | GET    | mac                     | No       | Retrieve one or the entire list of reservations  |
+|                | POST   |                         |          | Create a new reservation                         |
+|                | PUT    | mac                     | Yes      | Update an existing reservation by MAC address    |
+|                | DELETE | mac                     | Yes      | Delete a reservation by MAC address              |
+| **/leases**    |        |                         |          |                                                  |
+|                | GET    |                         |          | Retrieve lease information                       |
+| **/clients**   |        |                         |          |                                                  |
+|                | GET    | since=YYYY-mm-dd        | No       | Retrieve clients, optionally filtered by a date  |
+| **/addresses** |        |                         |          |                                                  |
+|                | GET    |                         |          | Retrieve IPv4 addresses used by a MAC address    |
+| **/devices**   |        |                         |          |                                                  |
+|                | GET    |                         |          | Retrieve MACs that used a specific IPv4 address  |
+| **/requests**  |        |                         |          |                                                  |
+|                | GET    | cidr                    | Yes      | Retrieve requests filtered by CIDR               |
+|                | GET    | range                   | Yes      | Retrieve requests filtered by range              |
+
+## Examples
+
+### Reservations
+
+```bash
+echo '{}' |
+jq '.mac = "bc:32:b2:3b:13:d4" | .ipv4 = "192.168.1.9" | .hostname = "Adam-s-Phone" | .tags = ["unsafe"]' |
+curl -s http://dhcp/reservations -X POST -d @-
+{"message":"success"}
+curl -s http://dhcp/reservations/bc:32:b2:3b:13:d4 | jq
+{
+  "mac": "bc:32:b2:3b:13:d4",
+  "tags": [
+    "unsafe"
+  ],
+  "ipv4": "192.168.1.9",
+  "hostname": "Adam-s-Phone"
+}
+
+curl -s http://dhcp/reservations/bc:32:b2:3b:13:d4 |
+jq '.tags = ["safe"]' |
+curl -s http://dhcp/reservations/bc:32:b2:3b:13:d4 -X PUT -d @-
+{"message":"success"}
+curl -s http://dhcp/reservations/bc:32:b2:3b:13:d4 | jq
+{
+  "mac": "bc:32:b2:3b:13:d4",
+  "tags": [
+    "safe"
+  ],
+  "ipv4": "192.168.1.9",
+  "hostname": "Adam-s-Phone"
+}
+curl -s http://dhcp/reservations/bc:32:b2:3b:13:d4 -X DELETE
+{"message":"success"}
+curl -s http://dhcp/reservations/bc:32:b2:3b:13:d4 | jq
+{"error":"no such reservation"}
+```
+
+### Leases
 
 Iterates the leases table. It takes no parameters.
 
@@ -28,7 +95,7 @@ bc:32:b2:3b:13:d4       192.168.1.9             Adam-s-Phone        android-dhcp
 6c:29:90:fc:4a:2c       192.168.1.105           wiz_fc4a2c
 ```
 
-## Clients
+### Clients
 
 Iterates the clients table but adds the total number of requests and requested IP addresses.
 It takes a "since" date as the only parameter.
@@ -49,7 +116,7 @@ column -t
 7  6c:29:90:ca:8f:e0  wiz_ca8fe0     192.168.1.108
 ```
 
-## Addresses and Devies
+### Addresses and Devices
 
 Iterates the IPv4 addresses requested by the mac and vice versa.
 It provides first and last seen times, requested options and the vendor class.
@@ -82,7 +149,7 @@ curl -s http://dhcp/devices/192.168.1.90 | jq
 ]
 ```
 
-## Requests
+### Requests
 
 Itemizes the history of requests for each IPv4 address queried.
 
@@ -107,94 +174,8 @@ curl -s 'http://dhcp/requests?cidr=192.168.1.0/24' | jq 'keys'
 The full output is more detailed.
 
 ```bash
-curl -s 'http://dhcp/requests?cidr=192.168.1.0/24' | jq
+curl -s 'http://dhcp/requests?range=192.168.1.1-10' | jq
 {
-  "192.168.1.105": [
-    {
-      "mac": "6c:29:90:2a:a4:03",
-      "hostname": "wiz_2aa403",
-      "vendor_class": "",
-      "requested_options": "",
-      "requested": "2024-09-03 12:56:34"
-    }
-  ],
-  "192.168.1.107": [
-    {
-      "mac": "6c:29:90:75:ac:b5",
-      "hostname": "wiz_75acb5",
-      "vendor_class": "",
-      "requested_options": "",
-      "requested": "2024-09-03 12:43:24"
-    }
-  ],
-  "192.168.1.108": [
-    {
-      "mac": "6c:29:90:ca:8f:e0",
-      "hostname": "wiz_ca8fe0",
-      "vendor_class": "",
-      "requested_options": "",
-      "requested": "2024-09-03 13:05:36"
-    }
-  ],
-  "192.168.1.113": [
-    {
-      "mac": "6c:29:90:69:82:b4",
-      "hostname": "wiz_6982b4",
-      "vendor_class": "",
-      "requested_options": "",
-      "requested": "2024-09-03 12:59:33"
-    }
-  ],
-  "192.168.1.118": [
-    {
-      "mac": "6c:29:90:56:f3:b6",
-      "hostname": "wiz_56f3b6",
-      "vendor_class": "",
-      "requested_options": "",
-      "requested": "2024-09-03 12:45:33"
-    }
-  ],
-  "192.168.1.143": [
-    {
-      "mac": "44:4f:8e:ce:fa:64",
-      "hostname": "wiz_cefa64",
-      "vendor_class": "",
-      "requested_options": "",
-      "requested": "2024-09-03 12:57:54"
-    }
-  ],
-  "192.168.1.146": [
-    {
-      "mac": "44:4f:8e:a0:62:46",
-      "hostname": "wiz_a06246",
-      "vendor_class": "",
-      "requested_options": "1,3,28,6",
-      "requested": "2024-09-03 11:55:49"
-    },
-    {
-      "mac": "44:4f:8e:a0:62:46",
-      "hostname": "wiz_a06246",
-      "vendor_class": "",
-      "requested_options": "",
-      "requested": "2024-09-03 12:51:03"
-    }
-  ],
-  "192.168.1.208": [
-    {
-      "mac": "84:28:59:86:57:36",
-      "hostname": "",
-      "vendor_class": "android-dhcp-11",
-      "requested_options": "",
-      "requested": "2024-09-03 12:50:58"
-    },
-    {
-      "mac": "84:28:59:86:57:36",
-      "hostname": "",
-      "vendor_class": "android-dhcp-11",
-      "requested_options": "1,3,6,15,26,28,51,58,59,43,114",
-      "requested": "2024-09-03 13:00:05"
-    }
-  ],
   "192.168.1.9": [
     {
       "mac": "bc:32:b2:3b:13:d4",
@@ -203,15 +184,69 @@ curl -s 'http://dhcp/requests?cidr=192.168.1.0/24' | jq
       "requested_options": "",
       "requested": "2024-09-03 12:37:22"
     }
-  ],
-  "192.168.1.90": [
-    {
-      "mac": "64:b7:08:7a:44:10",
-      "hostname": "amazon",
-      "vendor_class": "",
-      "requested_options": "",
-      "requested": "2024-09-03 13:02:04"
-    }
   ]
 }
+```
+
+## Security
+
+When running as a daemon with `-d`, the `-T`, `-c`, and `-t` options control the _TokenChecker_.
+
+### TokenChecker
+
+The TokenChecker implements a simple token management scheme,
+an HTTP header checker,
+and a token publishing endpoint.
+
+```bash
+-T int
+        the maximum number of tokens to issue at a time (0 disables token checking) (default 1)
+ -c int
+        the maximum number of times a token can be used (the default 0 means unlimited)
+-t duration
+        the duration a token is valid (the default 0 means forever)
+```
+
+Example:
+
+To use a single token with unlimited reuse forever, run:
+
+```bash
+dnsmasq-web -d -l :80
+```
+
+For 3 tokens that expire after 8 hours, run:
+
+```bash
+dnsmasq-web -d -l :80 -T 3 -t 8h
+```
+
+For 10 token single-use tokens that expire after a 30 days, run:
+
+```bash
+dnsmasq-web -d -l :80 -T 10 -c 1 -t $((24*30))h
+```
+
+### Use
+
+By default it expects an `X-Token` header.
+It publishes tokens on a UNIX domain socket at `/run/dnsmasq-web.sock` by default.
+
+Getting the token from there is straight-forward with cURL:
+
+```bash
+curl -s --unix-socket /run/dnsmasq-web.sock ./
+ffab9080-0197-43c4-895a-80eff055d428
+# save it to a variable
+token=$(curl -s --unix-socket /run/dnsmasq-web.sock ./)
+# create the header
+header = "X-Token: $token"
+# use cURL
+curl -H "$header" -s http://dhcp/leases
+```
+
+These steps can be combined with SSH to allow remote access with tokens:
+
+```bash
+curl -H "X-Token: $(ssh -ntq dhcp curl -s --unix-socket /run/dnsmasq-web.sock .)" -s http://dhcp/leases
 ```
