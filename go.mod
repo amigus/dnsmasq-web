@@ -1,4 +1,4 @@
-module dnsmasq-web
+module github.com/amigus/dnsmasq-web
 
 go 1.22.0
 
