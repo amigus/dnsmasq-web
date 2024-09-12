@@ -2,6 +2,8 @@ name: Release
 
 on:
   push:
+    branches:
+      - build-test
     tags:
       - "v*.*.*"
 
@@ -15,32 +17,36 @@ jobs:
         targets:
           - 'linux-amd64'
           - 'linux-amd64-musl'
+          - 'linux-arm64'
+          - 'linux-arm64-musl'
           - 'linux-arm-7'
     name: Build Binaries
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Go
         uses: actions/setup-go@v5
-        with:
-          go-version: '1.22'
 
-      - name: Build go program
+      - name: Declare version
+        run: |
+            echo BUILD="$(git describe --tags --always) # $(date)" >> $GITHUB_ENV
+  
+      - name: Build binaries
         id: cgo-action
         uses: go-cross/cgo-actions@v1
+        env:
+          BUILD_VERSION: ${{ env.BUILD }}
         with:
+          flags: -ldflags=-X 'main.Version=${{ env.BUILD }}'
           targets: ${{ matrix.targets }}
           output: $repo-${{ github.ref_name }}_$target$ext
-
-      - run: echo "${{ steps.cgo-action.outputs.files }}"
 
       - name: Upload Release Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: binaries
+          name: binaries-${{ matrix.targets }}
           path: |
             bin/*-${{ github.ref_name }}_*
 
@@ -58,12 +64,17 @@ jobs:
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          name: binaries
-    
+          path: bin
+          pattern: binaries-*
+          merge-multiple: true
+
+      - name: Strip binaries with symbols
+        run: |
+              strip -s bin/*_linux-amd64
+
       - name: Create checksums
         run: |
-          shasum -a 256 *-${{ github.ref_name }}_* >| checksums.txt
-          file *-${{ github.ref_name }}_* checksums.txt
+          cd bin; shasum -a 256 *-${{ github.ref_name }}_* >| ../checksums.txt
 
       - name: Sign checksums
         run: |
@@ -87,10 +98,6 @@ jobs:
         run: |
           gh release upload "${{ github.ref_name }}" \
             --repo "${{ github.repository }}" \
-            *-${{ github.ref_name }}_* \
+            bin/*-${{ github.ref_name }}_* \
             checksums.txt checksums.txt.sig
-
-
-
-
 
