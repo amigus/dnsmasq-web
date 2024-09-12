@@ -33,6 +33,8 @@ const (
 	varLibMiscPath         = "/var/lib/misc"
 )
 
+var Version string = "development"
+
 func main() {
 	var databaseFilePath, hostDirPath, listenOn, pidFilePath, unixSocketPath, subnet, userFlag, groupFlag string
 	var daemonize bool
@@ -52,6 +54,7 @@ func main() {
 	flag.IntVar(&maxTokens, "T", 1, "the maximum number of tokens to issue at a time (0 disables token checking)")
 	flag.IntVar(&maxTokenUses, "c", 0, "the maximum number of times a token can be used (the default 0 means unlimited)")
 	flag.DurationVar(&tokenTimeout, "t", time.Duration(0), "the duration a token is valid (the default 0 means forever)")
+	flag.Bool("version", false, "print the version and exit")
 	flag.Usage = func() {
 		fmt.Fprintf(
 			flag.CommandLine.Output(), `
@@ -77,6 +80,11 @@ Setting -T 0 disables token checking which is not recommended.
 		)
 	}
 	flag.Parse()
+
+	if flag.Lookup("version").Value.String() == "true" {
+		fmt.Printf("%s %s\n", filepath.Base(os.Args[0]), Version)
+		os.Exit(0)
+	}
 
 	hostDir, err := os.Stat(hostDirPath)
 	if err != nil {
