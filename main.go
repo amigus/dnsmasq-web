@@ -6,84 +6,102 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"os/exec"
-	"os/user"
 	"path/filepath"
-	"slices"
-	"strconv"
-	"syscall"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	_ "github.com/mattn/go-sqlite3"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 const (
-	defaultDatabaseFile    = "dnsmasq.leases.db"
-	defaultReservationsDir = "dnsmasq.reservations.d"
+	defaultDatabaseFile    = "/var/lib/misc/dnsmasq.leases.db"
+	defaultReservationsDir = "/var/lib/misc/dnsmasq.reservations.d"
 	defaultListenOn        = ":8080"
-	defaultPidFile         = "dnsmasq-web.pid"
-	defaultUnixSocket      = "dnsmasq-web.sock"
+	defaultPidFile         = "/run/dnsmasq-web.pid"
+	defaultUnixSocket      = "/run/dnsmasq-web.sock"
 	defaultSubnetCIDR      = "192.168.0.0/16"
-	runPath                = "/run"
 	listenerEnvVar         = "LISTENER_ON"
 	tokenHeader            = "X-Token"
 	tokenEndpointPath      = "/"
-	varLibMiscPath         = "/var/lib/misc"
 )
 
-var Version string = "development"
+var Version string = "development # 2030-12-31 (unknown@unknown)"
 
 func main() {
+	name := filepath.Base(os.Args[0])
+
 	var databaseFilePath, hostDirPath, listenOn, pidFilePath, unixSocketPath, subnet, userFlag, groupFlag string
-	var daemonize bool
+	var daemonize, preserveEnv, verbose bool
 	var maxDays, maxTokens, maxTokenUses int
 	var tokenTimeout time.Duration
 
 	flag.BoolVar(&daemonize, "d", false, "fork and run as a daemon")
-	flag.StringVar(&databaseFilePath, "f", fmt.Sprintf("%s/%s", varLibMiscPath, defaultDatabaseFile), "the SQLite database file")
-	flag.StringVar(&hostDirPath, "h", fmt.Sprintf("%s/%s", varLibMiscPath, defaultReservationsDir), "the reservations files directory")
+	flag.BoolVar(&preserveEnv, "E", false, "preserve environment when daemonizing")
+	flag.StringVar(&databaseFilePath, "f", defaultDatabaseFile, "the SQLite database file")
+	flag.StringVar(&hostDirPath, "h", defaultReservationsDir, "the reservations files directory")
 	flag.StringVar(&listenOn, "l", defaultListenOn, "the IP address and port to listen on")
 	flag.IntVar(&maxDays, "m", 0, "the maximum number of days of requests to query (< 1 means no limit)")
 	flag.StringVar(&subnet, "s", defaultSubnetCIDR, "the subnet of in scope devices")
 	flag.StringVar(&groupFlag, "g", "", "group to run the process as (requires root)")
-	flag.StringVar(&pidFilePath, "P", fmt.Sprintf("%s/%s", runPath, defaultPidFile), "the PID file")
-	flag.StringVar(&unixSocketPath, "S", fmt.Sprintf("%s/%s", runPath, defaultUnixSocket), "the Unix domain socket")
+	flag.StringVar(&pidFilePath, "P", defaultPidFile, "the PID file")
+	flag.StringVar(&unixSocketPath, "S", defaultUnixSocket, "the Unix domain socket")
 	flag.StringVar(&userFlag, "u", "", "user to run the process as (requires root)")
 	flag.IntVar(&maxTokens, "T", 1, "the maximum number of tokens to issue at a time (0 disables token checking)")
 	flag.IntVar(&maxTokenUses, "c", 0, "the maximum number of times a token can be used (the default 0 means unlimited)")
 	flag.DurationVar(&tokenTimeout, "t", time.Duration(0), "the duration a token is valid (the default 0 means forever)")
-	flag.Bool("version", false, "print the version and exit")
+	flag.BoolVar(&verbose, "v", false, "print verbose output")
+	flag.Bool("V", false, "print the version and exit")
 	flag.Usage = func() {
 		fmt.Fprintf(
 			flag.CommandLine.Output(), `
-Dnsmasq Web is a JSON/HTTP interface for Dnsmasq.
+Dnsmasq Web is a database-backed JSON/HTTP API for Dnsmasq.
 
 Usage: %s [options] [-d [daemonize options]]
 Options:
-	[-f database] [-h host-dir] [-l address] [-m days] [-s subnet]
+    [-f database] [-h host-dir] [-l address] [-m days] [-s subnet]
 Daemonize Options:
-	[-u user] [-g group]
-	[-T max-tokens] [-c max-uses] [-t timeout]
-	[-P path] [-S path ]
+    [-E]
+    [-u user] [-g group]
+    [-T max-tokens] [-c max-uses] [-t timeout]
+    [-P path] [-S path]
 
 `,
-			filepath.Base(os.Args[0]),
+			name,
 		)
 		flag.PrintDefaults()
 		fmt.Fprint(flag.CommandLine.Output(), `
 Listening on ports below 1024, e.g., -l ":80" requires root privileges.
 Using the -u and -g flags to drop root privilege after opening the port is recommended.
-Setting -T 0 disables token checking which is not recommended.
+The tokens are kept in memory and are not persisted across restarts.
+Setting -E copies all environment variables to the child process.
+Setting -T 0 disables token checking entirely.
 `,
 		)
 	}
 	flag.Parse()
 
-	if flag.Lookup("version").Value.String() == "true" {
-		fmt.Printf("%s %s\n", filepath.Base(os.Args[0]), Version)
+	if flag.Lookup("V").Value.String() == "true" {
+		fmt.Printf("%s %s\n", name, Version)
 		os.Exit(0)
+	}
+
+	// Test that databaseFilePath is a valid SQLite database
+	if db, err := sql.Open("sqlite3", databaseFilePath); err != nil {
+		fmt.Fprintf(os.Stderr, "unable to open database file: %v\n", err)
+		os.Exit(1)
+	} else {
+		defer db.Close()
+		if err = db.Ping(); err != nil {
+			fmt.Fprintf(os.Stderr, "database file is not an SQLite database: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	if verbose {
+		fmt.Printf("using lease database: %s\n", databaseFilePath)
 	}
 
 	hostDir, err := os.Stat(hostDirPath)
@@ -97,80 +115,50 @@ Setting -T 0 disables token checking which is not recommended.
 		os.Exit(1)
 	}
 
+	if verbose {
+		fmt.Printf("using host-dir: %s\n", hostDirPath)
+	}
+
 	if daemonize {
-		// cmd is the background (child) process this (parent) process will start then exit
-		cmd := exec.Command(os.Args[0])
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-		// It will run without -d, -u or -g because they only affect the parent process
-		dFlagIndex := slices.Index(os.Args, "-d")
-		gFlagIndex := slices.Index(os.Args, "-g")
-		uFlagIndex := slices.Index(os.Args, "-u")
-		for i := 1; i < len(os.Args); i++ {
-			if i == gFlagIndex || i == uFlagIndex {
-				i++
-			} else if i != dFlagIndex {
-				cmd.Args = append(cmd.Args, os.Args[i])
-			}
-		}
-		// Start listening on the port and pass the descriptor to it
-		if listener, err := net.Listen("tcp", listenOn); err == nil {
-			// There's no .Close() because this process will exit with the listener open
-			if file, err := listener.(*net.TCPListener).File(); err == nil {
-				cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", listenerEnvVar, file.Name()))
-				cmd.ExtraFiles = []*os.File{file}
-			} else {
-				fmt.Fprintf(os.Stderr, "unable to get listener file: %v\n", err)
+		// Check that host-dir is writable
+		if hostDir != nil {
+			if dir, err := os.MkdirTemp(hostDirPath, "*"); err != nil {
+				fmt.Fprintf(os.Stderr, "unable to write to host directory: %v\n", err)
 				os.Exit(1)
+			} else {
+				os.Remove(dir)
 			}
 		} else {
-			fmt.Fprintf(os.Stderr, "unable to open socket: %v\n", err)
-			os.Exit(1)
-		}
-		// Create the host directory if it doesn't exist
-		if hostDir == nil {
+			// Otherwise, create it
 			if err := os.Mkdir(hostDirPath, 0750); err != nil {
 				fmt.Fprintf(os.Stderr, "unable to create host directory: %v\n", err)
 				os.Exit(1)
 			}
 		}
-		// Set the user and group for the child process, i.e., drop root privileges
-		if userFlag != "" || groupFlag != "" {
-			cmd.SysProcAttr.Credential = &syscall.Credential{}
-			// user. and group.Lookup() accept names or numeric IDs
-			if userFlag != "" {
-				if usr, err := user.Lookup(userFlag); err == nil {
-					if uid, err := strconv.Atoi(usr.Uid); err == nil {
-						cmd.SysProcAttr.Credential.Uid = uint32(uid)
-						if hostDir == nil {
-							// Change the owner of the host directory if it was created
-							os.Chown(hostDirPath, uid, -1)
-						}
-					} else {
-						fmt.Fprintf(os.Stderr, "invalid UID for user %s: %v\n", userFlag, err)
-						os.Exit(1)
-					}
-				} else {
-					fmt.Fprintf(os.Stderr, "failed to lookup user %s: %v\n", userFlag, err)
-					os.Exit(1)
-				}
-			}
-			if groupFlag != "" {
-				if grp, err := user.LookupGroup(groupFlag); err == nil {
-					if gid, err := strconv.Atoi(grp.Gid); err == nil {
-						cmd.SysProcAttr.Credential.Gid = uint32(gid)
-						if hostDir == nil {
-							os.Chown(hostDirPath, -1, gid)
-						}
-					} else {
-						fmt.Fprintf(os.Stderr, "invalid GID for group %s: %v\n", groupFlag, err)
-						os.Exit(1)
-					}
-				} else {
-					fmt.Fprintf(os.Stderr, "failed to lookup group %s: %v\n", groupFlag, err)
-					os.Exit(1)
-				}
-			}
+
+		// Inherent variables from the parent process if -E is set
+		var envVars []string
+		if preserveEnv {
+			envVars = os.Environ()
+		} else {
+			envVars = make([]string, 0, 1)
 		}
+
+		// RunDaemon takes the listener(s) as file descriptors via cmd.ExtraFiles
+		extraFiles := make([]*os.File, 2)
+
+		// Start listening on the port and pass the descriptor to it
+		if err := Listener(listenOn, extraFiles); err != nil {
+			fmt.Fprintf(os.Stderr, "unable to open socket: %v\n", err)
+			os.Exit(1)
+		} else {
+			envVars = append(envVars, fmt.Sprintf("%s=%s", listenerEnvVar, extraFiles[0].Name()))
+		}
+
+		if verbose {
+			fmt.Printf("listening on: %s\n", extraFiles[0].Name())
+		}
+
 		// If token checking is enabled, set up the UNIX domain socket to host the TokenPublisher
 		if maxTokens > 0 {
 			// Remove the old UNIX domain socket if it still exists
@@ -180,9 +168,7 @@ Setting -T 0 disables token checking which is not recommended.
 			}
 			// Create a new UNIX domain socket for the child process in its place
 			if listener, err := net.Listen("unix", unixSocketPath); err == nil {
-				if file, err := listener.(*net.UnixListener).File(); err == nil {
-					cmd.ExtraFiles = append(cmd.ExtraFiles, file)
-				} else {
+				if extraFiles[1], err = listener.(*net.UnixListener).File(); err != nil {
 					fmt.Fprintf(os.Stderr, "unable to get unix socket file: %v\n", err)
 					os.Exit(1)
 				}
@@ -190,29 +176,47 @@ Setting -T 0 disables token checking which is not recommended.
 				fmt.Fprintf(os.Stderr, "unable to listen on unix socket: %v\n", err)
 				os.Exit(1)
 			}
+
+			if verbose {
+				var sb strings.Builder
+				sb.WriteString("token checking is enabled with ")
+				if maxTokens > 1 {
+					sb.WriteString(fmt.Sprintf("%d", maxTokens))
+				} else {
+					sb.WriteString("one")
+				}
+				if maxTokenUses > 1 {
+					sb.WriteString(fmt.Sprintf(", %d use", maxTokenUses))
+				} else if maxTokenUses == 1 {
+					sb.WriteString(", single use")
+				}
+				sb.WriteString(" token")
+				if maxTokens > 1 {
+					sb.WriteString("s")
+				}
+				sb.WriteString(" that has")
+				if tokenTimeout > 0 {
+					sb.WriteString(fmt.Sprintf(" a %s timeout\n", tokenTimeout))
+				} else {
+					sb.WriteString(" no timeout\n")
+				}
+				fmt.Print(sb.String())
+			}
+		} else if verbose {
+			fmt.Println("token checking is disabled")
+		}
+
+		if verbose {
+			fmt.Printf("writing pid file: %s\n", pidFilePath)
 		}
 		// Start the child process in the background
-		if err := cmd.Start(); err != nil {
-			fmt.Fprintf(os.Stderr, "unable to start as a daemon: %v\n", err)
-			os.Exit(1)
-		}
-		// exitAll exits the parent process after killing the child process
-		exitAll := func(status int, message string, args ...any) {
-			fmt.Fprintf(os.Stderr, message, args...)
-			cmd.Process.Kill()
-			os.Exit(status)
+		pid := RunDaemon(pidFilePath, userFlag, groupFlag, envVars, extraFiles)
 
+		if verbose {
+			fmt.Printf("started a daemon with PID: %d; exiting with status 0\n", pid)
 		}
-		// Write the PID file
-		if pidFile, err := os.Create(pidFilePath); err != nil {
-			exitAll(1, "unable to create PID file: '%s': %v\n", pidFilePath, err)
-		} else {
-			defer pidFile.Close()
-			if _, err := pidFile.WriteString(strconv.Itoa(cmd.Process.Pid)); err != nil {
-				exitAll(1, "unable to write PID to file: %v\n", err)
-			}
-		}
-		fmt.Fprintf(os.Stderr, "started as a daemon with PID %d\n", cmd.Process.Pid)
+
+		// Exit the parent process having successfully started the child process
 		os.Exit(0)
 	} else {
 		// Open the database using the sqlite3 package
@@ -262,5 +266,4 @@ Setting -T 0 disables token checking which is not recommended.
 		}
 		os.Exit(1)
 	}
-
 }
