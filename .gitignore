@@ -1,3 +1,7 @@
+.config
 **/__debug_bin*
 *.db
 dnsmasq-web
+dnsmasq-web.sh
+dnsmasq-web-amd64
+dnsmasq-web-arm64
