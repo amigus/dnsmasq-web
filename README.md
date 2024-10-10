@@ -3,21 +3,39 @@
 [![Release](https://github.com/amigus/dnsmasq-web/actions/workflows/release.yml/badge.svg)](https://github.com/amigus/dnsmasq-web/actions/workflows/release.yml)
 [![Run Tests](https://github.com/amigus/dnsmasq-web/actions/workflows/test.yml/badge.svg)](https://github.com/amigus/dnsmasq-web/actions/workflows/test.yml)
 
-A JSON/HTTP interface for Dnsmasq.
-It makes it easy to maintain DHCP reservations and query client, lease and request information easily over HTTP.
-It stores the client, lease and request information in an
+A JSON/HTTP interface for Dnsmasq and client interface written in POSIX shell.
+It extends Dnsmasq using the `dhcp-script` and `dhcp-hostsdir` configuration parameters.
+The script maintains client, lease and request information in an
 [SQLite](https://www.sqlite.org/index.html)
 [database](https://gist.github.com/amigus/6a9e4151d175d04bf05337b815f2213e).
-
-It leverages the `dhcp-script` and `dhcp-hostsdir` configuration options of Dnsmasq.
-The `dhcp-script` maintains the database it queries.
-It also maintains reservations files in the `dhcp-hostsdir` directory.
+The DHCP reservation data is stored in files under the host directory.
 
 ## Installation
 
 1. Add the [database](https://gist.github.com/amigus/6a9e4151d175d04bf05337b815f2213e) to the DHCP server.
 1. Download the appropriate binary from the [releases](https://github.com/amigus/dnsmasq-web/releases/latest) page to the DHCP server.
 1. Run it, e.g., `dnsmasq-web` or as a daemon with `sudo dnsmasq-web -d -l :80 -T 0`.
+
+## Client
+
+The [cli](cli) directory contains a client interface written in POSIX shell.
+
+The scripts define functions when sourced into the environment, e.g.:
+
+```sh
+. /path/to/dnsmasq-web.env
+dnsmasq_web_curl addresses/bc:32:b2:3b:13:d4 | jq
+[
+  {
+    "ipv4": "192.168.1.9",
+    "first_seen": "2024-09-03 10:07:21",
+    "last_seen": "2024-09-03 12:37:22",
+    "requested_options": "",
+    "hostname": "Adam-s-Phone",
+    "vendor_class": "android-dhcp-14"
+  }
+]
+```
 
 ## Endpoints
 
