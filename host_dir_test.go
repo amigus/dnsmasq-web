@@ -145,6 +145,25 @@ func TestUpdateReservation(t *testing.T) {
 	assert.Contains(t, string(content), "48h")
 }
 
+func TestUpdateReservationNoTags(t *testing.T) {
+	r := setupRouterForReservationsTests()
+	defer os.RemoveAll("./test_hosts")
+
+	// First create a reservation
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/reservations", strings.NewReader(`{
+		"mac": "00:1A:2B:3C:4D:5E",
+		"ipv4": "192.168.1.100",
+		"hostname": "test-host"
+	}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusCreated, w.Code)
+
+	content, _ := os.ReadFile(filepath.Join("./test_hosts", "00:1a:2b:3c:4d:5e"))
+	assert.Equal(t, "00:1a:2b:3c:4d:5e,192.168.1.100,test-host\n", string(content))
+}
+
 func TestDeleteReservation(t *testing.T) {
 	r := setupRouterForReservationsTests()
 	defer os.RemoveAll("./test_hosts")
