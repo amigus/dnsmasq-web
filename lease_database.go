@@ -36,13 +36,10 @@ type Client struct {
 }
 
 // ipListFromExpression returns the list of IP addresses ipaddr derives from the expression.
-func ipListFromExpression(expression string, subnet *ipaddr.IPAddress) ([]string, error) {
+func ipListFromExpression(expression string) ([]string, error) {
 	ipRange, err := ipaddr.NewIPAddressString(expression).ToAddress()
 	if err != nil {
 		return nil, err
-	}
-	if !subnet.Contains(ipRange) {
-		return nil, fmt.Errorf("parameter is not within the subnet")
 	}
 
 	var ipList []string
@@ -110,7 +107,7 @@ func whereSince(c *gin.Context, db *gorm.DB, oldest time.Time, name, field strin
 	return nil, false
 }
 
-func LeaseDatabase(r *gin.Engine, db *gorm.DB, maxDays int, subnetCidr string) *gin.Engine {
+func LeaseDatabase(r *gin.Engine, db *gorm.DB) *gin.Engine {
 	db.AutoMigrate(&Request{}, &Lease{}, &Client{})
 
 	r.GET("/leases", func(c *gin.Context) {
@@ -290,19 +287,12 @@ func LeaseDatabase(r *gin.Engine, db *gorm.DB, maxDays int, subnetCidr string) *
 		}
 
 		var err error // to avoid a type error in ipListFromExpression
-
-		subnet, err := ipaddr.NewIPAddressString(subnetCidr).ToAddress()
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid subnet prefix"})
-			return
-		}
-
 		var ipStrings []string
 
 		if cidr != "" {
-			ipStrings, err = ipListFromExpression(cidr, subnet)
+			ipStrings, err = ipListFromExpression(cidr)
 		} else if ipRange != "" {
-			ipStrings, err = ipListFromExpression(ipRange, subnet)
+			ipStrings, err = ipListFromExpression(ipRange)
 		}
 
 		if err != nil {
