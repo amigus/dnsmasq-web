@@ -18,7 +18,7 @@ func setupRouter() *gin.Engine {
 
 	db.Exec(testDatabaseSQL)
 
-	return LeaseDatabase(r, db, 30, "192.168.1.0/24")
+	return LeaseDatabase(r, db)
 }
 
 func TestLeasesEndpoint(t *testing.T) {

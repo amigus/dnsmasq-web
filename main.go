@@ -22,7 +22,6 @@ const (
 	defaultListenOn        = ":8080"
 	defaultPidFile         = "/run/dnsmasq-web.pid"
 	defaultUnixSocket      = "/run/dnsmasq-web.sock"
-	defaultSubnetCIDR      = "192.168.0.0/16"
 	listenerEnvVar         = "LISTENER_ON"
 	tokenHeader            = "X-Token"
 	tokenEndpointPath      = "/"
@@ -33,9 +32,9 @@ var Version string = "development # 2030-12-31 (unknown@unknown)"
 func main() {
 	name := filepath.Base(os.Args[0])
 
-	var databaseFilePath, hostDirPath, listenOn, pidFilePath, unixSocketPath, subnet, userFlag, groupFlag string
+	var databaseFilePath, hostDirPath, listenOn, pidFilePath, unixSocketPath, userFlag, groupFlag string
 	var daemonize, preserveEnv, verbose bool
-	var maxDays, maxTokens, maxTokenUses int
+	var maxTokens, maxTokenUses int
 	var tokenTimeout time.Duration
 
 	flag.BoolVar(&daemonize, "d", false, "fork and run as a daemon")
@@ -43,8 +42,6 @@ func main() {
 	flag.StringVar(&databaseFilePath, "f", defaultDatabaseFile, "the SQLite database file")
 	flag.StringVar(&hostDirPath, "h", defaultReservationsDir, "the reservations files directory")
 	flag.StringVar(&listenOn, "l", defaultListenOn, "the IP address and port to listen on")
-	flag.IntVar(&maxDays, "m", 0, "the maximum number of days of requests to query (< 1 means no limit)")
-	flag.StringVar(&subnet, "s", defaultSubnetCIDR, "the subnet of in scope devices")
 	flag.StringVar(&groupFlag, "g", "", "group to run the process as (requires root)")
 	flag.StringVar(&pidFilePath, "P", defaultPidFile, "the PID file")
 	flag.StringVar(&unixSocketPath, "S", defaultUnixSocket, "the Unix domain socket")
@@ -61,12 +58,12 @@ Dnsmasq Web is a database-backed JSON/HTTP API for Dnsmasq.
 
 Usage: %s [options] [-d [daemonize options]]
 Options:
-    [-f database] [-h host-dir] [-l address] [-m days] [-s subnet]
+    [-f database] [-h host-dir] [-l address] [-v]
 Daemonize Options:
     [-E]
     [-u user] [-g group]
     [-T max-tokens] [-c max-uses] [-t timeout]
-    [-P path] [-S path]
+    [-P pid-file] [-S unix-socket]
 
 `,
 			name,
@@ -249,7 +246,7 @@ Setting -T 0 disables token checking entirely.
 					}
 				}()
 			}
-			r = DhcpHostDir(LeaseDatabase(r, gormDb, maxDays, subnet), hostDirPath)
+			r = DhcpHostDir(LeaseDatabase(r, gormDb), hostDirPath)
 			// Gin defaults to DebugMode so set this explicitly
 			gin.SetMode(gin.ReleaseMode)
 			// Run on the open socket; 3 because 0, 1 and 2 are stdin, stdout and stderr
@@ -259,7 +256,7 @@ Setting -T 0 disables token checking entirely.
 		} else {
 			// Run without -d and not as the child process, i.e., running in the foreground
 			if err := DhcpHostDir(
-				LeaseDatabase(gin.Default(), gormDb, maxDays, subnet), hostDirPath,
+				LeaseDatabase(gin.Default(), gormDb), hostDirPath,
 			).Run(listenOn); err != nil {
 				fmt.Fprintf(os.Stderr, "unable to listen on '%s': %v\n", listenOn, err)
 			}
