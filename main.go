@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -246,6 +248,21 @@ Setting -T 0 disables token checking entirely.
 					}
 				}()
 			}
+			// Set up a signal handler to remove the UNIX domain socket and PID file
+			sigs := make(chan os.Signal, 1)
+			signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+			go func() {
+				<-sigs
+				if err := os.Remove(pidFilePath); err != nil {
+					fmt.Fprintf(gin.DefaultErrorWriter, "unable to remove pid file: %v\n", err)
+				}
+				if maxTokens > 0 {
+					if err := os.Remove(unixSocketPath); err != nil {
+						fmt.Fprintf(gin.DefaultErrorWriter, "unable to remove unix socket: %v\n", err)
+					}
+				}
+				os.Exit(1)
+			}()
 			r = DhcpHostDir(LeaseDatabase(r, gormDb), hostDirPath)
 			// Gin defaults to DebugMode so set this explicitly
 			gin.SetMode(gin.ReleaseMode)
