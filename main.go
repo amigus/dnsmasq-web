@@ -205,23 +205,19 @@ Setting -T 0 disables token checking entirely.
 			fmt.Println("token checking is disabled")
 		}
 
-		if verbose {
-			fmt.Printf("writing pid file: %s\n", pidFilePath)
-		}
 		// Start the child process in the background
 		pid := RunDaemon(pidFilePath, userFlag, groupFlag, envVars, extraFiles)
 
 		if verbose {
-			fmt.Printf("started a daemon with PID: %d; exiting with status 0\n", pid)
+			fmt.Printf("wrote pid file: %s\nstarted a daemon with PID: %d\nexiting with status 0\n", pidFilePath, pid)
 		}
-
 		// Exit the parent process having successfully started the child process
 		os.Exit(0)
 	} else {
 		// Open the database using the sqlite3 package
 		db, err := sql.Open("sqlite3", databaseFilePath)
 		if err != nil {
-			fmt.Fprintf(gin.DefaultErrorWriter, "unable to open database %s: %v",
+			fmt.Fprintf(os.Stderr, "unable to open database %s: %v",
 				databaseFilePath, err)
 			os.Exit(1)
 		}
@@ -254,11 +250,11 @@ Setting -T 0 disables token checking entirely.
 			go func() {
 				<-sigs
 				if err := os.Remove(pidFilePath); err != nil {
-					fmt.Fprintf(gin.DefaultErrorWriter, "unable to remove pid file: %v\n", err)
+					fmt.Fprintf(os.Stderr, "unable to remove pid file: %v\n", err)
 				}
 				if maxTokens > 0 {
 					if err := os.Remove(unixSocketPath); err != nil {
-						fmt.Fprintf(gin.DefaultErrorWriter, "unable to remove unix socket: %v\n", err)
+						fmt.Fprintf(os.Stderr, "unable to remove unix socket: %v\n", err)
 					}
 				}
 				os.Exit(1)
