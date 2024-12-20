@@ -47,7 +47,7 @@ func createReservationFile(input reservation, c *gin.Context, hostDir string, ov
 		return
 	}
 
-	content := fmt.Sprintf("%s", mac.ToColonDelimitedString())
+	content := mac.ToColonDelimitedString()
 	
 	if len(input.Tags) > 0 {
 		content += "," + strings.Join(prefixTags(input.Tags), ",")
