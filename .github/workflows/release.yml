@@ -31,15 +31,13 @@ jobs:
 
       - name: Declare version
         run: |
-            echo BUILD="$(git describe --tags --always) # $(date)" >> $GITHUB_ENV
+            echo BUILDINFO="$(git describe --tags --always) built $(date)" >> $GITHUB_ENV
   
       - name: Build binaries
         id: cgo-action
         uses: go-cross/cgo-actions@v1
-        env:
-          BUILD_VERSION: ${{ env.BUILD }}
         with:
-          flags: -ldflags=-X 'main.Version=${{ env.BUILD }}'
+          flags: -ldflags=-X 'main.Version=${{ env.BUILDINFO }}'
           targets: ${{ matrix.targets }}
           output: $repo-${{ github.ref_name }}_$target$ext
 
