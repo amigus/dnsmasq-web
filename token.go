@@ -32,6 +32,7 @@ type tokenChecker struct {
 	index    int
 	mu       sync.Mutex
 }
+
 // NewTokenChecker creates a new TokenChecker with the given parameters.
 // The maxCount is the number of tokens to allocate at once.
 // The maxUses is the maximum number of times each token can be used before it expires.

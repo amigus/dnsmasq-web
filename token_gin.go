@@ -21,7 +21,7 @@ func TokenCheckerHeader(r *gin.Engine, ttc TokenChecker, headerName string) *gin
 
 // TokenCheckerPublisher adds a route to the gin engine for GET on the given path that returns a valid token.
 func TokenCheckerPublisher(r *gin.Engine, ttc TokenChecker, path string) *gin.Engine {
-	r.GET(path, func(c *gin.Context) {c.String(http.StatusOK, ttc.Get())})
+	r.GET(path, func(c *gin.Context) { c.String(http.StatusOK, ttc.Get()) })
 
 	return r
 }
