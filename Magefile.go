@@ -27,14 +27,14 @@ func buildInfo() (string, error) {
 	gitInfo := strings.TrimSpace(string(output))
 
 	// Get the current datetime
-	datetime := time.Now().Format("2006-01-02")
+	datetime := time.Now().Format(time.RFC1123)
 
 	// Get the build user
 	user := os.Getenv("USER")
 	hostname := os.Getenv("HOSTNAME")
 
 	// Combine git info and datetime
-	buildInfo := fmt.Sprintf("%s # %s (%s@%s)", gitInfo, datetime, user, hostname)
+	buildInfo := fmt.Sprintf("%s built %s by %s@%s", gitInfo, datetime, user, hostname)
 	return buildInfo, nil
 }
 
@@ -151,7 +151,6 @@ func CleanBinaries() error {
 func CleanClientEnv() error {
 	return os.RemoveAll(fmt.Sprintf("%s.env", Name))
 }
-
 
 func Clean() {
 	if err := CleanClientEnv(); err != nil {

@@ -100,4 +100,3 @@ func TestTokenChecker_CheckTooManyReuses(t *testing.T) {
 	assert.False(t, ttc.Check(token1), "Expected token to be invalid")
 	assert.True(t, ttc.Check(token2), "Expected token to be valid")
 }
-

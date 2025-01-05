@@ -40,15 +40,14 @@ func id(u, g string) (uint32, uint32, error) {
 	return uint32(uid), uint32(gid), nil
 }
 
-// Listener returns the environment variable for the listener file descriptor it adds to extraFiles
-func Listener(on string, extraFiles []*os.File) error {
+// Listen returns the listener file descriptor
+func Listen(on string) (*os.File, error) {
 	if listener, err := net.Listen("tcp", on); err != nil {
-		return fmt.Errorf("unable to listen on %s: %v", on, err)
+		return nil, fmt.Errorf("unable to listen on %s: %v", on, err)
 	} else if file, err := listener.(*net.TCPListener).File(); err != nil {
-		return fmt.Errorf("unable to get listener file: %v", err)
+		return nil, fmt.Errorf("unable to get listener file: %v", err)
 	} else {
-		extraFiles[0] = file
-		return nil
+		return file, nil
 	}
 }
 
