@@ -24,7 +24,7 @@ const (
 	defaultListenOn        = ":8080"
 	defaultPidFile         = "/run/dnsmasq-web.pid"
 	defaultUnixSocket      = "/run/dnsmasq-web.sock"
-	listenerEnvVar         = "LISTENER_ON"
+	listenerEnvVarName     = "LISTENING_ON"
 	tokenHeader            = "X-Token"
 	tokenEndpointPath      = "/"
 )
@@ -46,7 +46,7 @@ func main() {
 	flag.StringVar(&listenOn, "l", defaultListenOn, "the IP address and port to listen on")
 	flag.StringVar(&groupFlag, "g", "", "group to run the process as (requires root)")
 	flag.StringVar(&pidFilePath, "P", defaultPidFile, "the PID file")
-	flag.StringVar(&unixSocketPath, "S", defaultUnixSocket, "the Unix domain socket")
+	flag.StringVar(&unixSocketPath, "S", defaultUnixSocket, "the UNIX domain socket")
 	flag.StringVar(&userFlag, "u", "", "user to run the process as (requires root)")
 	flag.IntVar(&maxTokens, "T", 1, "the maximum number of tokens to issue at a time (0 disables token checking)")
 	flag.IntVar(&maxTokenUses, "c", 0, "the maximum number of times a token can be used (the default 0 means unlimited)")
@@ -87,14 +87,16 @@ Setting -T 0 disables token checking entirely.
 		os.Exit(0)
 	}
 
-	// Test that databaseFilePath is a valid SQLite database
+	// Exit if databaseFilePath does not exist or is not an SQLite database
 	if db, err := sql.Open("sqlite3", databaseFilePath); err != nil {
-		fmt.Fprintf(os.Stderr, "unable to open database file: %v\n", err)
+		fmt.Fprintf(os.Stderr, "unable to open database '%s': %v\n",
+			databaseFilePath, err)
 		os.Exit(1)
 	} else {
 		defer db.Close()
 		if err = db.Ping(); err != nil {
-			fmt.Fprintf(os.Stderr, "database file is not an SQLite database: %v\n", err)
+			fmt.Fprintf(os.Stderr, "database '%s' is not an SQLite database: %v\n",
+				databaseFilePath, err)
 			os.Exit(1)
 		}
 	}
@@ -103,6 +105,7 @@ Setting -T 0 disables token checking entirely.
 		fmt.Printf("using lease database: %s\n", databaseFilePath)
 	}
 
+	// Exit if hostDirPath is not an existing directory unless daemonizing
 	hostDir, err := os.Stat(hostDirPath)
 	if err != nil {
 		if os.IsNotExist(err) && !daemonize {
@@ -119,7 +122,7 @@ Setting -T 0 disables token checking entirely.
 	}
 
 	if daemonize {
-		// Check that host-dir is writable
+		// Check that host-dir is writable otherwise create it
 		if hostDir != nil {
 			if dir, err := os.MkdirTemp(hostDirPath, "*"); err != nil {
 				fmt.Fprintf(os.Stderr, "unable to write to host directory: %v\n", err)
@@ -128,7 +131,6 @@ Setting -T 0 disables token checking entirely.
 				os.Remove(dir)
 			}
 		} else {
-			// Otherwise, create it
 			if err := os.Mkdir(hostDirPath, 0750); err != nil {
 				fmt.Fprintf(os.Stderr, "unable to create host directory: %v\n", err)
 				os.Exit(1)
@@ -147,25 +149,26 @@ Setting -T 0 disables token checking entirely.
 		extraFiles := make([]*os.File, 2)
 
 		// Start listening on the port and pass the descriptor to it
-		if err := Listener(listenOn, extraFiles); err != nil {
+		if listener, err := Listen(listenOn); err != nil {
 			fmt.Fprintf(os.Stderr, "unable to open socket: %v\n", err)
 			os.Exit(1)
 		} else {
-			envVars = append(envVars, fmt.Sprintf("%s=%s", listenerEnvVar, extraFiles[0].Name()))
+			ev := fmt.Sprintf("%s=%s", listenerEnvVarName, listener.Name())
+			if verbose {
+				fmt.Printf("setting child process environment variable: %s\n", ev)
+			}
+			envVars = append(envVars, ev)
+			extraFiles[0] = listener
 		}
 
-		if verbose {
-			fmt.Printf("listening on: %s\n", extraFiles[0].Name())
-		}
-
-		// If token checking is enabled, set up the UNIX domain socket to host the TokenPublisher
+		// Create the UNIX domain socket to host the TokenPublisher when token checking is enabled
 		if maxTokens > 0 {
-			// Remove the old UNIX domain socket if it still exists
+			// Remove the stale UNIX domain socket if it still exists
 			if err := os.Remove(unixSocketPath); err != nil && !os.IsNotExist(err) {
 				fmt.Fprintf(os.Stderr, "unable to remove unix socket: %v\n", err)
 				os.Exit(1)
 			}
-			// Create a new UNIX domain socket for the child process in its place
+			// Create a new UNIX domain socket for the child process
 			if listener, err := net.Listen("unix", unixSocketPath); err == nil {
 				if extraFiles[1], err = listener.(*net.UnixListener).File(); err != nil {
 					fmt.Fprintf(os.Stderr, "unable to get unix socket file: %v\n", err)
@@ -178,7 +181,7 @@ Setting -T 0 disables token checking entirely.
 
 			if verbose {
 				var sb strings.Builder
-				sb.WriteString("token checking is enabled with ")
+				sb.WriteString("token checking enabled using ")
 				if maxTokens > 1 {
 					sb.WriteString(fmt.Sprintf("%d", maxTokens))
 				} else {
@@ -193,7 +196,7 @@ Setting -T 0 disables token checking entirely.
 				if maxTokens > 1 {
 					sb.WriteString("s")
 				}
-				sb.WriteString(" that has")
+				sb.WriteString(" with")
 				if tokenTimeout > 0 {
 					sb.WriteString(fmt.Sprintf(" a %s timeout\n", tokenTimeout))
 				} else {
@@ -202,7 +205,7 @@ Setting -T 0 disables token checking entirely.
 				fmt.Print(sb.String())
 			}
 		} else if verbose {
-			fmt.Println("token checking is disabled")
+			fmt.Println("token checking disabled")
 		}
 
 		// Start the child process in the background
@@ -214,23 +217,28 @@ Setting -T 0 disables token checking entirely.
 		// Exit the parent process having successfully started the child process
 		os.Exit(0)
 	} else {
-		// Open the database using the sqlite3 package
-		db, err := sql.Open("sqlite3", databaseFilePath)
+		sigs := make(chan os.Signal, 1)
+		// Set a signal handler to remove the UNIX domain socket and PID file before exiting
+		signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+		go func() {
+			<-sigs
+			os.Remove(pidFilePath)
+			if maxTokens > 0 {
+				syscall.Close(3)
+				os.Remove(unixSocketPath)
+			}
+			os.Exit(0)
+		}()
+		// Open the database using gorm with sqlite3
+		gormDb, err := gorm.Open(sqlite.Open(databaseFilePath), &gorm.Config{})
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "unable to open database %s: %v",
+			fmt.Fprintf(os.Stderr, "unable to open database '%s': %v\n",
 				databaseFilePath, err)
 			os.Exit(1)
 		}
-		defer db.Close()
-
-		// Pass the database connection to gorm.Open
-		gormDb, err := gorm.Open(sqlite.Dialector{Conn: db})
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "unable to connect database: %v", err)
-			os.Exit(1)
-		}
-
-		if os.Getenv(listenerEnvVar) != "" {
+		// Run the server
+		if os.Getenv(listenerEnvVarName) != "" {
+			// As the child process by starting the server on the open socket
 			r := gin.Default()
 			// Use the token checker when running as a daemon
 			ttc := NewTokenChecker(maxTokens, maxTokenUses, tokenTimeout)
@@ -244,21 +252,6 @@ Setting -T 0 disables token checking entirely.
 					}
 				}()
 			}
-			// Set up a signal handler to remove the UNIX domain socket and PID file
-			sigs := make(chan os.Signal, 1)
-			signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-			go func() {
-				<-sigs
-				if err := os.Remove(pidFilePath); err != nil {
-					fmt.Fprintf(os.Stderr, "unable to remove pid file: %v\n", err)
-				}
-				if maxTokens > 0 {
-					if err := os.Remove(unixSocketPath); err != nil {
-						fmt.Fprintf(os.Stderr, "unable to remove unix socket: %v\n", err)
-					}
-				}
-				os.Exit(1)
-			}()
 			r = DhcpHostDir(LeaseDatabase(r, gormDb), hostDirPath)
 			// Gin defaults to DebugMode so set this explicitly
 			gin.SetMode(gin.ReleaseMode)
@@ -267,7 +260,7 @@ Setting -T 0 disables token checking entirely.
 				fmt.Fprintf(os.Stderr, "unable to listen on already open socket: %v\n", err)
 			}
 		} else {
-			// Run without -d and not as the child process, i.e., running in the foreground
+			// Without -d and not as the child process, i.e., running in the foreground
 			if err := DhcpHostDir(
 				LeaseDatabase(gin.Default(), gormDb), hostDirPath,
 			).Run(listenOn); err != nil {
