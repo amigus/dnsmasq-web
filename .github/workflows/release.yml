@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     branches:
-      - build-test
+      - "build-test-*"
     tags:
       - "v*.*.*"
 
@@ -31,15 +31,13 @@ jobs:
 
       - name: Declare version
         run: |
-            echo BUILD="$(git describe --tags --always) # $(date)" >> $GITHUB_ENV
+          echo VERSION="$(git describe --tags --always) built $(date +'%a, %d %b %Y %H:%M:%S %Z') by $USER@$HOSTNAME" >> $GITHUB_ENV
   
       - name: Build binaries
         id: cgo-action
         uses: go-cross/cgo-actions@v1
-        env:
-          BUILD_VERSION: ${{ env.BUILD }}
         with:
-          flags: -ldflags=-X 'main.Version=${{ env.BUILD }}'
+          flags: -ldflags=-X 'main.Version=${{ env.VERSION }}'
           targets: ${{ matrix.targets }}
           output: $repo-${{ github.ref_name }}_$target$ext
 
@@ -70,7 +68,7 @@ jobs:
 
       - name: Strip binaries with symbols
         run: |
-              strip -s bin/*_linux-amd64
+          strip -s bin/*_linux-amd64
 
       - name: Create checksums
         run: |
