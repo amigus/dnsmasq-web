@@ -208,26 +208,18 @@ curl -s 'http://dhcp/requests?range=192.168.1.1-10' | jq
 
 ## Security
 
-When running as a daemon with `-d`, the `-T`, `-c`, and `-t` options control the _TokenChecker_.
-
-### TokenChecker
-
-The TokenChecker implements a simple token management scheme,
-an HTTP header checker,
-and a token publishing endpoint.
+When running as a daemon with `-d`, the `-T`, `-c`, and `-t` options control the [Simple Token Manager for Go](https://github.com/amigus/go-stm) which generates UUID format tokens according to the following parameters:
 
 ```bash
 -T int
         the maximum number of tokens to issue at a time (0 disables token checking) (default 1)
- -c int
+-c int
         the maximum number of times a token can be used (the default 0 means unlimited)
 -t duration
         the duration a token is valid (the default 0 means forever)
 ```
 
-Example:
-
-To use a single token with unlimited reuse forever, run:
+Thus, by default, it generates a single token with unlimited reuse forever.
 
 ```bash
 dnsmasq-web -d -l :80
@@ -247,8 +239,9 @@ dnsmasq-web -d -l :80 -T 10 -c 1 -t $((24*30))h
 
 ### Use
 
-By default it expects an `X-Token` header.
-It publishes tokens on a UNIX domain socket at `/run/dnsmasq-web.sock` by default.
+The token is sent via the `X-Token` custom HTTP header.
+
+It publishes tokens on the `/run/dnsmasq-web.sock` UNIX socket by default.
 
 Getting the token from there is straight-forward with cURL:
 
