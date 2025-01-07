@@ -1,3 +1,5 @@
+github.com/amigus/go-stm v0.1.0 h1:iSmD1+SR6aHhlte/ol6H2ZqyMqsXzPewjwex3RPdFBo=
+github.com/amigus/go-stm v0.1.0/go.mod h1:vpihXMDt8KcNss1HPUo6iS6PJ+8o955DsR0+MJM/Cak=
 github.com/bytedance/sonic v1.12.2 h1:oaMFuRTpMHYLpCntGca65YWt5ny+wAceDERTkT2L9lg=
 github.com/bytedance/sonic v1.12.2/go.mod h1:B8Gt/XvtZ3Fqj+iSKMypzymZxw/FVwgIGKzMzT9r/rk=
 github.com/bytedance/sonic/loader v0.1.1/go.mod h1:ncP89zfokxS5LZrJxl5z0UJcsk4M4yY2JpfqGeCtNLU=
