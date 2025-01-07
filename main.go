@@ -12,6 +12,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/amigus/go-stm"
+	stm_gin "github.com/amigus/go-stm/gin"
 	"github.com/gin-gonic/gin"
 	_ "github.com/mattn/go-sqlite3"
 	"gorm.io/driver/sqlite"
@@ -240,13 +242,13 @@ Setting -T 0 disables token checking entirely.
 		if os.Getenv(listenerEnvVarName) != "" {
 			// As the child process by starting the server on the open socket
 			r := gin.Default()
-			// Use the token checker when running as a daemon
-			ttc := NewTokenChecker(maxTokens, maxTokenUses, tokenTimeout)
+			// Use a tokenChecker when running as a daemon
+			tm := stm.UUIDTokenManager(maxTokens, maxTokenUses, tokenTimeout)
 			if maxTokens > 0 {
-				r = TokenCheckerHeader(r, ttc, tokenHeader)
+				r = stm_gin.HeaderChecker(r, tm, tokenHeader)
 				go func() {
 					// Serve the TokenPublisher over a Unix domain socket
-					if err := TokenCheckerPublisher(gin.Default(), ttc, tokenEndpointPath).RunFd(4); err != nil {
+					if err := stm_gin.TokenPublisher(gin.Default(), tm, tokenEndpointPath).RunFd(4); err != nil {
 						fmt.Fprintf(os.Stderr, "unable to serve on unix socket: %v\n", err)
 						os.Exit(1)
 					}
