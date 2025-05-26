@@ -4,7 +4,7 @@ go 1.23.4
 
 require (
 	github.com/amigus/go-stm v0.1.0
-	github.com/gin-gonic/gin v1.10.0
+	github.com/gin-gonic/gin v1.10.1
 	github.com/seancfoley/ipaddress-go v1.7.0
 	github.com/stretchr/testify v1.10.0
 	gorm.io/driver/sqlite v1.5.7
