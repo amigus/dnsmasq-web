@@ -52,11 +52,10 @@ func Listen(on string) (*os.File, error) {
 }
 
 // RunDaemon starts the child process in the background and exits the parent process
-func RunDaemon(pidFilePath, user, group string, env []string, extraFiles []*os.File) int {
+func RunDaemon(listenAddress, user, group string, preserveEnv bool, extraFiles []*os.File) *os.Process {
 	// cmd is the background (child) process this (parent) process will start then exit
 	cmd := exec.Command(os.Args[0])
-	cmd.Env = env
-	cmd.ExtraFiles = extraFiles
+	cmd.ExtraFiles = make([]*os.File, len(extraFiles)+1)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	// Remove flags only relavent to the parent process
 	dFlagIndex := slices.Index(os.Args, "-d")
@@ -72,6 +71,14 @@ func RunDaemon(pidFilePath, user, group string, env []string, extraFiles []*os.F
 			cmd.Args = append(cmd.Args, os.Args[i])
 		}
 	}
+	
+	// Inherent variables from the parent process if -E is set
+	if preserveEnv {
+		cmd.Env = os.Environ()
+	} else {
+		cmd.Env = make([]string, 0, 1)
+	}
+
 	// Set the user and group for the child process, i.e., drop root privileges
 	if user != "" || group != "" {
 		if uid, gid, err := id(user, group); err == nil {
@@ -82,26 +89,37 @@ func RunDaemon(pidFilePath, user, group string, env []string, extraFiles []*os.F
 		}
 	}
 
+	// Create the listener and save the file descriptor for the child process
+	if listener, err := Listen(listenAddress); err == nil {
+		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", listenerEnvVarName, listener.Name()))
+		cmd.ExtraFiles[0] = listener
+	} else {
+		fmt.Fprintf(os.Stderr, "unable to open socket: %v\n", err)
+		os.Exit(1)
+	}
+	copy(cmd.ExtraFiles[1:], extraFiles)
+
 	// Start the child process in the background
 	if err := cmd.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "unable to start as a daemon: %v\n", err)
 		os.Exit(1)
 	}
-	// exitAll exits the parent process after killing the child process
-	exitAll := func(status int, message string, args ...any) {
-		fmt.Fprintf(os.Stderr, message, args...)
-		cmd.Process.Kill()
-		os.Exit(status)
+	return cmd.Process
+}
 
+func WritePidFile(process *os.Process, filePath string) {
+	printErr := func(err error) {
+		fmt.Fprintf(os.Stderr, "unable to write PID file: %v\n", err)
 	}
-	// Write the PID file
-	if pidFile, err := os.Create(pidFilePath); err != nil {
-		exitAll(1, "unable to create PID file: '%s': %v\n", pidFilePath, err)
+	if pidFile, err := os.Create(filePath); err != nil {
+		printErr(err)
+		os.Exit(1)
 	} else {
 		defer pidFile.Close()
-		if _, err := pidFile.WriteString(strconv.Itoa(cmd.Process.Pid)); err != nil {
-			exitAll(1, "unable to write PID to file: %v\n", err)
+		if _, err := pidFile.WriteString(strconv.Itoa(process.Pid)); err != nil {
+			printErr(err)
+			process.Kill()
+			os.Exit(1)
 		}
 	}
-	return cmd.Process.Pid
 }

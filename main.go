@@ -137,29 +137,7 @@ Setting -T 0 disables token checking entirely.
 			}
 		}
 
-		// Inherent variables from the parent process if -E is set
-		var envVars []string
-		if preserveEnv {
-			envVars = os.Environ()
-		} else {
-			envVars = make([]string, 0, 1)
-		}
-
-		// RunDaemon takes the listener(s) as file descriptors via cmd.ExtraFiles
-		extraFiles := make([]*os.File, 2)
-
-		// Start listening on the port and pass the descriptor to it
-		if listener, err := Listen(listenOn); err != nil {
-			fmt.Fprintf(os.Stderr, "unable to open socket: %v\n", err)
-			os.Exit(1)
-		} else {
-			ev := fmt.Sprintf("%s=%s", listenerEnvVarName, listener.Name())
-			if verbose {
-				fmt.Printf("setting child process environment variable: %s\n", ev)
-			}
-			envVars = append(envVars, ev)
-			extraFiles[0] = listener
-		}
+		extraFiles := make([]*os.File, 1) // 0: listener, 1: unix socket
 
 		// Create the UNIX domain socket to host the TokenPublisher when token checking is enabled
 		if maxTokens > 0 {
@@ -170,7 +148,7 @@ Setting -T 0 disables token checking entirely.
 			}
 			// Create a new UNIX domain socket for the child process
 			if listener, err := net.Listen("unix", unixSocketPath); err == nil {
-				if extraFiles[1], err = listener.(*net.UnixListener).File(); err != nil {
+				if extraFiles[0], err = listener.(*net.UnixListener).File(); err != nil {
 					fmt.Fprintf(os.Stderr, "unable to get unix socket file: %v\n", err)
 					os.Exit(1)
 				}
@@ -209,10 +187,10 @@ Setting -T 0 disables token checking entirely.
 		}
 
 		// Start the child process in the background
-		pid := RunDaemon(pidFilePath, userFlag, groupFlag, envVars, extraFiles)
-
+		process := RunDaemon(listenOn, userFlag, groupFlag, preserveEnv, extraFiles)
+		WritePidFile(process, pidFilePath)
 		if verbose {
-			fmt.Printf("wrote pid file: %s\nstarted a daemon with PID: %d\nexiting with status 0\n", pidFilePath, pid)
+			fmt.Printf("wrote pid file: %s\nstarted a daemon with PID: %d\nexiting with status 0\n", pidFilePath, process.Pid)
 		}
 		// Exit the parent process having successfully started the child process
 		os.Exit(0)
