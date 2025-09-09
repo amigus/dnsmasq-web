@@ -228,19 +228,19 @@ and a token publishing endpoint.
 Thus, by default, it generates a single token with unlimited reuse forever.
 
 ```bash
-dnsmasq-web -d -l :80
+dnsmasq-web -d -l :867
 ```
 
 For 3 tokens that expire after 8 hours, run:
 
 ```bash
-dnsmasq-web -d -l :80 -T 3 -t 8h
+dnsmasq-web -d -l :867 -T 3 -t 8h
 ```
 
 For 10 token single-use tokens that expire after a 30 days, run:
 
 ```bash
-dnsmasq-web -d -l :80 -T 10 -c 1 -t $((24*30))h
+dnsmasq-web -d -l :867 -T 10 -c 1 -t $((24*30))h
 ```
 
 ### Use
