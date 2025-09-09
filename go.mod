@@ -10,7 +10,7 @@ require (
 	github.com/seancfoley/ipaddress-go v1.7.1
 	github.com/stretchr/testify v1.10.0
 	gorm.io/driver/sqlite v1.6.0
-	gorm.io/gorm v1.30.0
+	gorm.io/gorm v1.30.5
 )
 
 require (
