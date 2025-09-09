@@ -29,7 +29,7 @@ Consider configuring SSH to connect to it without prompting for a password/passp
 It does two things:
 
 1. It uses `$DNSMASQ_WEB_SERVER` instead of requiring the full URL as an argument
-1. It uses `$DNSMASQ_WEB_TOKEN` to add the `X-Token` header to each request
+1. It uses `$DNSMASQ_WEB_TOKEN` to add the `Authorization` header to each request
 
 There are also two commands to manage _reservations_:
 

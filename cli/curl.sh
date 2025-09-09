@@ -13,7 +13,7 @@ dnsmasq_web_try_curl() {
     url="http://$DNSMASQ_WEB_SERVER/${1%%/}"
     shift
     args='--fail-with-body --silent'
-    dnsmasq_web_requires_token && args="$args --header 'X-Token: $(
+    dnsmasq_web_requires_token && args="$args --header 'Authorization: $(
         if test -n "$DNSMASQ_WEB_TOKEN"; then
             echo "$DNSMASQ_WEB_TOKEN"
         else
