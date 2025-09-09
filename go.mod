@@ -5,7 +5,6 @@ go 1.23.4
 toolchain go1.24.1
 
 require (
-	github.com/amigus/go-stm v0.1.0
 	github.com/gin-gonic/gin v1.10.1
 	github.com/seancfoley/ipaddress-go v1.7.1
 	github.com/stretchr/testify v1.10.0

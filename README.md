@@ -208,7 +208,13 @@ curl -s 'http://dhcp/requests?range=192.168.1.1-10' | jq
 
 ## Security
 
-When running as a daemon with `-d`, the `-T`, `-c`, and `-t` options control the [Simple Token Manager for Go](https://github.com/amigus/go-stm) which generates UUID format tokens according to the following parameters:
+When running as a daemon with `-d`, the `-T`, `-c`, and `-t` options control the _TokenChecker_.
+
+### TokenChecker
+
+The TokenChecker implements a simple token management scheme,
+an HTTP header checker,
+and a token publishing endpoint.
 
 ```bash
 -T int
