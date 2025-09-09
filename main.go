@@ -19,14 +19,11 @@ import (
 )
 
 const (
-	defaultDatabaseFile    = "/var/lib/misc/dnsmasq.leases.db"
-	defaultReservationsDir = "/var/lib/misc/dnsmasq.reservations.d"
-	defaultListenOn        = ":8080"
-	defaultPidFile         = "/run/dnsmasq-web.pid"
-	defaultUnixSocket      = "/run/dnsmasq-web.sock"
-	listenerEnvVarName     = "LISTENING_ON"
-	tokenHeader            = "X-Token"
-	tokenEndpointPath      = "/"
+	defaultPidFile     = "/run/dnsmasq-web.pid"
+	defaultUnixSocket  = "/run/dnsmasq-web.sock"
+	listenerEnvVarName = "LISTENING_ON"
+	tokenHeader        = "Authorization"
+	tokenEndpointPath  = "/"
 )
 
 var Version string = "development # 2030-12-31 (unknown@unknown)"
@@ -41,9 +38,9 @@ func main() {
 
 	flag.BoolVar(&daemonize, "d", false, "fork and run as a daemon")
 	flag.BoolVar(&preserveEnv, "E", false, "preserve environment when daemonizing")
-	flag.StringVar(&databaseFilePath, "f", defaultDatabaseFile, "the SQLite database file")
-	flag.StringVar(&hostDirPath, "h", defaultReservationsDir, "the reservations files directory")
-	flag.StringVar(&listenOn, "l", defaultListenOn, "the IP address and port to listen on")
+	flag.StringVar(&databaseFilePath, "f", "", "the SQLite database file")
+	flag.StringVar(&hostDirPath, "h", "", "the dhcp-host files directory")
+	flag.StringVar(&listenOn, "l", "", "the IP address and port to listen on, e.g., ':867'")
 	flag.StringVar(&groupFlag, "g", "", "group to run the process as (requires root)")
 	flag.StringVar(&pidFilePath, "P", defaultPidFile, "the PID file")
 	flag.StringVar(&unixSocketPath, "S", defaultUnixSocket, "the UNIX domain socket")
@@ -60,7 +57,7 @@ Dnsmasq Web is a database-backed JSON/HTTP API for Dnsmasq.
 
 Usage: %s [options] [-d [daemonize options]]
 Options:
-    [-f database] [-h host-dir] [-l address] [-v]
+    -f database-file -h host-dir -l address [-v]
 Daemonize Options:
     [-E]
     [-u user] [-g group]
@@ -72,7 +69,7 @@ Daemonize Options:
 		)
 		flag.PrintDefaults()
 		fmt.Fprint(flag.CommandLine.Output(), `
-Listening on ports below 1024, e.g., -l ":80" requires root privileges.
+Listening on ports below 1024, e.g., -l ":867" requires root privileges.
 Using the -u and -g flags to drop root privilege after opening the port is recommended.
 The tokens are kept in memory and are not persisted across restarts.
 Setting -E copies all environment variables to the child process.
@@ -87,80 +84,68 @@ Setting -T 0 disables token checking entirely.
 		os.Exit(0)
 	}
 
-	// Exit if databaseFilePath does not exist or is not an SQLite database
-	if db, err := sql.Open("sqlite3", databaseFilePath); err != nil {
-		fmt.Fprintf(os.Stderr, "unable to open database '%s': %v\n",
-			databaseFilePath, err)
+	if listenOn == "" {
+		fmt.Fprintf(os.Stderr, "an address to listen on is required, e.g., -l :867\n")
 		os.Exit(1)
-	} else {
-		defer db.Close()
-		if err = db.Ping(); err != nil {
-			fmt.Fprintf(os.Stderr, "database '%s' is not an SQLite database: %v\n",
+	}
+
+	if databaseFilePath == "" && hostDirPath == "" {
+		fmt.Fprintf(os.Stderr, "one or both of -f database-file and -h host-dir are required\n")
+		os.Exit(1)
+	}
+
+	if databaseFilePath != "" {
+		// Exit if databaseFilePath does not exist as a readable SQLite database
+		if db, err := sql.Open("sqlite3", databaseFilePath); err != nil {
+			fmt.Fprintf(os.Stderr, "unable to open database '%s': %v\n",
 				databaseFilePath, err)
 			os.Exit(1)
+		} else {
+			defer db.Close()
+			if err = db.Ping(); err != nil {
+				fmt.Fprintf(os.Stderr, "database '%s' is not an SQLite database: %v\n",
+					databaseFilePath, err)
+				os.Exit(1)
+			}
+		}
+
+		if verbose {
+			fmt.Printf("using lease database: %s\n", databaseFilePath)
 		}
 	}
 
-	if verbose {
-		fmt.Printf("using lease database: %s\n", databaseFilePath)
-	}
-
-	// Exit if hostDirPath is not an existing directory unless daemonizing
-	hostDir, err := os.Stat(hostDirPath)
-	if err != nil {
-		if os.IsNotExist(err) && !daemonize {
-			fmt.Fprintf(os.Stderr, "unable to stat host directory: %v\n", err)
+	if hostDirPath != "" {
+		// Exit if hostDirPath is not an existing directory and create it if -d is set
+		if hostDir, err := os.Stat(hostDirPath); err != nil {
+			if os.IsNotExist(err) {
+				if daemonize {
+					if err := os.Mkdir(hostDirPath, 0750); err != nil {
+						fmt.Fprintf(os.Stderr, "unable to stat or create host directory: %v\n", err)
+						os.Exit(1)
+					}
+				} else {
+					fmt.Fprintf(os.Stderr, "unable to stat host directory: %v\n", err)
+					os.Exit(1)
+				}
+			}
+		} else if !hostDir.IsDir() {
+			fmt.Fprintf(os.Stderr, "host directory '%s' is not a directory\n", hostDirPath)
 			os.Exit(1)
 		}
-	} else if !hostDir.IsDir() {
-		fmt.Fprintf(os.Stderr, "host-dir is not a directory: %s\n", hostDirPath)
-		os.Exit(1)
-	}
-
-	if verbose {
-		fmt.Printf("using host-dir: %s\n", hostDirPath)
+		// Exit if hostDirPath is not writable
+		if dir, err := os.MkdirTemp(hostDirPath, "*"); err != nil {
+			fmt.Fprintf(os.Stderr, "unable to write to host directory: %v\n", err)
+			os.Exit(1)
+		} else {
+			os.Remove(dir)
+		}
+		if verbose {
+			fmt.Printf("using host-dir: %s\n", hostDirPath)
+		}
 	}
 
 	if daemonize {
-		// Check that host-dir is writable otherwise create it
-		if hostDir != nil {
-			if dir, err := os.MkdirTemp(hostDirPath, "*"); err != nil {
-				fmt.Fprintf(os.Stderr, "unable to write to host directory: %v\n", err)
-				os.Exit(1)
-			} else {
-				os.Remove(dir)
-			}
-		} else {
-			if err := os.Mkdir(hostDirPath, 0750); err != nil {
-				fmt.Fprintf(os.Stderr, "unable to create host directory: %v\n", err)
-				os.Exit(1)
-			}
-		}
-
-		// Inherent variables from the parent process if -E is set
-		var envVars []string
-		if preserveEnv {
-			envVars = os.Environ()
-		} else {
-			envVars = make([]string, 0, 1)
-		}
-
-		// RunDaemon takes the listener(s) as file descriptors via cmd.ExtraFiles
-		extraFiles := make([]*os.File, 2)
-
-		// Start listening on the port and pass the descriptor to it
-		if listener, err := Listen(listenOn); err != nil {
-			fmt.Fprintf(os.Stderr, "unable to open socket: %v\n", err)
-			os.Exit(1)
-		} else {
-			ev := fmt.Sprintf("%s=%s", listenerEnvVarName, listener.Name())
-			if verbose {
-				fmt.Printf("setting child process environment variable: %s\n", ev)
-			}
-			envVars = append(envVars, ev)
-			extraFiles[0] = listener
-		}
-
+		extraFiles := make([]*os.File, 1) // 0: listener, 1: unix socket
 		// Create the UNIX domain socket to host the TokenPublisher when token checking is enabled
 		if maxTokens > 0 {
 			// Remove the stale UNIX domain socket if it still exists
@@ -170,7 +155,7 @@ Setting -T 0 disables token checking entirely.
 			}
 			// Create a new UNIX domain socket for the child process
 			if listener, err := net.Listen("unix", unixSocketPath); err == nil {
-				if extraFiles[1], err = listener.(*net.UnixListener).File(); err != nil {
+				if extraFiles[0], err = listener.(*net.UnixListener).File(); err != nil {
 					fmt.Fprintf(os.Stderr, "unable to get unix socket file: %v\n", err)
 					os.Exit(1)
 				}
@@ -178,7 +163,6 @@ Setting -T 0 disables token checking entirely.
 				fmt.Fprintf(os.Stderr, "unable to listen on unix socket: %v\n", err)
 				os.Exit(1)
 			}
-
 			if verbose {
 				var sb strings.Builder
 				sb.WriteString("token checking enabled using ")
@@ -207,12 +191,11 @@ Setting -T 0 disables token checking entirely.
 		} else if verbose {
 			fmt.Println("token checking disabled")
 		}
-
 		// Start the child process in the background
-		pid := RunDaemon(pidFilePath, userFlag, groupFlag, envVars, extraFiles)
-
+		process := RunDaemon(listenOn, userFlag, groupFlag, preserveEnv, extraFiles)
+		WritePidFile(process, pidFilePath)
 		if verbose {
-			fmt.Printf("wrote pid file: %s\nstarted a daemon with PID: %d\nexiting with status 0\n", pidFilePath, pid)
+			fmt.Printf("wrote pid file: %s\nstarted a daemon with PID: %d\nexiting with status 0\n", pidFilePath, process.Pid)
 		}
 		// Exit the parent process having successfully started the child process
 		os.Exit(0)
@@ -229,18 +212,22 @@ Setting -T 0 disables token checking entirely.
 			}
 			os.Exit(0)
 		}()
-		// Open the database using gorm with sqlite3
-		gormDb, err := gorm.Open(sqlite.Open(databaseFilePath), &gorm.Config{})
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "unable to open database '%s': %v\n",
-				databaseFilePath, err)
-			os.Exit(1)
+		r := gin.Default()
+		if databaseFilePath != "" {
+			gormDb, err := gorm.Open(sqlite.Open(databaseFilePath), &gorm.Config{})
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "unable to open database '%s': %v\n",
+					databaseFilePath, err)
+				os.Exit(1)
+			}
+			r = LeaseDatabase(r, gormDb)
+		}
+		if hostDirPath != "" {
+			r = DhcpHostDir(r, hostDirPath)
 		}
 		// Run the server
 		if os.Getenv(listenerEnvVarName) != "" {
-			// As the child process by starting the server on the open socket
-			r := gin.Default()
-			// Use the token checker when running as a daemon
+			// As a daemon and use the token checker
 			ttc := NewTokenChecker(maxTokens, maxTokenUses, tokenTimeout)
 			if maxTokens > 0 {
 				r = TokenCheckerHeader(r, ttc, tokenHeader)
@@ -252,18 +239,15 @@ Setting -T 0 disables token checking entirely.
 					}
 				}()
 			}
-			r = DhcpHostDir(LeaseDatabase(r, gormDb), hostDirPath)
-			// Gin defaults to DebugMode so set this explicitly
+			// Gin defaults to DebugMode
 			gin.SetMode(gin.ReleaseMode)
 			// Run on the open socket; 3 because 0, 1 and 2 are stdin, stdout and stderr
 			if err := r.RunFd(3); err != nil {
 				fmt.Fprintf(os.Stderr, "unable to listen on already open socket: %v\n", err)
 			}
 		} else {
-			// Without -d and not as the child process, i.e., running in the foreground
-			if err := DhcpHostDir(
-				LeaseDatabase(gin.Default(), gormDb), hostDirPath,
-			).Run(listenOn); err != nil {
+			// Without -d and not as the child process, i.e., in the foreground
+			if err := r.Run(listenOn); err != nil {
 				fmt.Fprintf(os.Stderr, "unable to listen on '%s': %v\n", listenOn, err)
 			}
 		}

@@ -8,7 +8,7 @@ test -n "$DNSMASQ_WEB_TOKEN_SOCKET" && {
     # Using ncat is noticeably slower but can be done like this:
     # echo -e 'GET / HTTP/1.1\r\nHost: .\r\n' | ncat -U $DNSMASQ_WEB_TOKEN_SOCKET | tail -1
     # Derive the SSH server from the web server:
-    DNSMASQ_WEB_SSH_SERVER=$(echo "$DNSMASQ_WEB_SERVER" | sed -e 's/^\[\(.*\)\]:.*$/\1/' -e 's/^\[\(.*\)\]$/\1/')
+    DNSMASQ_WEB_SSH_SERVER=$(echo "$DNSMASQ_WEB_SERVER" | sed -e 's|:[0-9]*$||' -e 's|\[\(.*\)\]|\1|')
     test -n "$DNSMASQ_WEB_SSH_SERVER" ||
         DNSMASQ_WEB_SSH_SERVER=$(expr "$DNSMASQ_WEB_SERVER" : '\([0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\)')
     test -n "$DNSMASQ_WEB_SSH_SERVER" ||

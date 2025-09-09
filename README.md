@@ -228,24 +228,24 @@ and a token publishing endpoint.
 Thus, by default, it generates a single token with unlimited reuse forever.
 
 ```bash
-dnsmasq-web -d -l :80
+dnsmasq-web -d -l :867
 ```
 
 For 3 tokens that expire after 8 hours, run:
 
 ```bash
-dnsmasq-web -d -l :80 -T 3 -t 8h
+dnsmasq-web -d -l :867 -T 3 -t 8h
 ```
 
 For 10 token single-use tokens that expire after a 30 days, run:
 
 ```bash
-dnsmasq-web -d -l :80 -T 10 -c 1 -t $((24*30))h
+dnsmasq-web -d -l :867 -T 10 -c 1 -t $((24*30))h
 ```
 
 ### Use
 
-The token is sent via the `X-Token` custom HTTP header.
+The token is sent via the `Authorization` HTTP request header.
 
 It publishes tokens on the `/run/dnsmasq-web.sock` UNIX socket by default.
 
@@ -256,14 +256,12 @@ curl -s --unix-socket /run/dnsmasq-web.sock ./
 ffab9080-0197-43c4-895a-80eff055d428
 # save it to a variable
 token=$(curl -s --unix-socket /run/dnsmasq-web.sock ./)
-# create the header
-header = "X-Token: $token"
 # use cURL
-curl -H "$header" -s http://dhcp/leases
+curl -H "Authorization: $token" -s http://dhcp/leases
 ```
 
 These steps can be combined with SSH to allow remote access with tokens:
 
 ```bash
-curl -H "X-Token: $(ssh -ntq dhcp curl -s --unix-socket /run/dnsmasq-web.sock .)" -s http://dhcp/leases
+curl -H "Authorization: $(ssh -ntq server curl -s --unix-socket /run/dnsmasq-web.sock .)" -s http://dhcp/leases
 ```
