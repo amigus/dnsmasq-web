@@ -52,11 +52,13 @@ func createReservationFile(input reservation, c *gin.Context, hostDir string, ov
 	if len(input.Tags) > 0 {
 		content += "," + strings.Join(prefixTags(input.Tags), ",")
 	}
-	if ipv4, err := validateIPv4(input.IPv4); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid IPv4 address"})
-		return
-	} else {
-		content += "," + ipv4.String()
+	if input.IPv4 != "" {
+		if ipv4, err := validateIPv4(input.IPv4); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid IPv4 address"})
+			return
+		} else {
+			content += "," + ipv4.String()
+		}
 	}
 	if input.Hostname != "" {
 		content += "," + input.Hostname
@@ -122,27 +124,36 @@ func readReservationFile(mac string, hostDir string) (reservation, error) {
 			MAC: parts[0],
 			reservationData: reservationData{
 				Tags:      []string{},
-				IPv4:      parts[1],
+				IPv4:      "",
 				Hostname:  "",
 				LeaseTime: "",
 			},
 		}
-		if strings.HasPrefix(parts[1], "set:") {
-			res.Tags = strings.Split(strings.Replace(parts[1], "set:", "", 1), ",")
-			res.IPv4 = parts[2]
-			if len(parts) > 3 {
-				res.Hostname = parts[3]
+
+		index := 1
+		// Collect tags (set:...) if present
+		for index < len(parts) && strings.HasPrefix(parts[index], "set:") {
+			res.Tags = append(res.Tags, strings.TrimPrefix(parts[index], "set:"))
+			index++
+		}
+
+		// Check if next part is IPv4
+		if index < len(parts) {
+			if ip, err := validateIPv4(parts[index]); err == nil {
+				res.IPv4 = ip.String()
+				index++
 			}
-			if len(parts) > 4 {
-				res.LeaseTime = parts[4]
-			}
-		} else {
-			if len(parts) > 2 {
-				res.Hostname = parts[2]
-			}
-			if len(parts) > 3 {
-				res.LeaseTime = parts[3]
-			}
+		}
+
+		// Hostname
+		if index < len(parts) {
+			res.Hostname = parts[index]
+			index++
+		}
+
+		// LeaseTime
+		if index < len(parts) {
+			res.LeaseTime = parts[index]
 		}
 
 		return res, nil

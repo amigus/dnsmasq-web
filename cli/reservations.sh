@@ -2,10 +2,29 @@
 
 dnsmasq_web_use dnsmasq_web_curl || return
 dnsmasq_web_reservation_add() {
+    mac="$1"
+    shift
+
+    if echo "$1" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
+        ipv4="$1"
+        shift
+        hostname="$1"
+        [ -n "$hostname" ] && shift
+        tags="$1"
+        [ -n "$tags" ] && shift
+        lease_time="$1"
+    else
+        tags="$1"
+        [ -n "$tags" ] && shift
+        lease_time="$1"
+    fi
+
     {
-        echo '{"mac":"'"$1"'","ipv4":"'"$2"'","hostname":"'"$3"'"'
-        test -n "$4" && echo ',"tags":["'"$4"'"]'
-        test -n "$5" && echo ',"lease_time":"'"$5"'"'
+        echo -n '{"mac":"'"$mac"'"'
+        [ -n "$ipv4" ] && echo -n ',"ipv4":"'"$ipv4"'"'
+        [ -n "$hostname" ] && echo -n ',"hostname":"'"$hostname"'"'
+        [ -n "$tags" ] && echo -n ',"tags":["'"$tags"'"]'
+        [ -n "$lease_time" ] && echo -n ',"lease_time":"'"$lease_time"'"'
         echo '}'
     } | dnsmasq_web_curl reservations -X POST -d @-
 }
