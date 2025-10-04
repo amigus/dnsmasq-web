@@ -22,7 +22,7 @@ jobs:
         run: |
           # Create the client environment by combining CLI scripts
           echo "# Dnsmasq Web Client environment" > dnsmasq-web.env
-          for script in use.sh token.sh curl.sh; do
+          for script in use.sh token.sh curl.sh curl_jq.sh jq_commands.sh reservations.sh; do
             tail -n +2 "cli/$script" >> dnsmasq-web.env
           done
           chmod +x dnsmasq-web.env
