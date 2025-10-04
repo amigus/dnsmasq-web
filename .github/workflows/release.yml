@@ -11,6 +11,28 @@ permissions:
   contents: write
 
 jobs:
+  build-client:
+    name: Build Client Environment
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Create client environment file
+        run: |
+          # Create the client environment by combining CLI scripts
+          echo "# Dnsmasq Web Client environment" > dnsmasq-web.env
+          for script in use.sh token.sh curl.sh; do
+            tail -n +2 "cli/$script" >> dnsmasq-web.env
+          done
+          chmod +x dnsmasq-web.env
+
+      - name: Upload Client Environment
+        uses: actions/upload-artifact@v4
+        with:
+          name: client-env
+          path: dnsmasq-web.env
+
   cgo-build:
     strategy:
       matrix:
@@ -50,7 +72,7 @@ jobs:
 
   release:
     name: Create Release
-    needs: cgo-build
+    needs: [cgo-build, build-client]
     runs-on: ubuntu-latest
     steps:
       - name: Import GPG key
@@ -66,9 +88,25 @@ jobs:
           pattern: binaries-*
           merge-multiple: true
 
+      - name: Download client environment
+        uses: actions/download-artifact@v5
+        with:
+          name: client-env
+          path: .
+
       - name: Strip binaries with symbols
         run: |
           strip -s bin/*_linux-amd64
+
+      - name: Minify client environment
+        run: |
+          # Get the latest shfmt release version
+          SHFMT_VERSION=$(curl -s https://api.github.com/repos/mvdan/sh/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/') &&
+          echo "Downloading shfmt $SHFMT_VERSION" &&
+          curl -sLo shfmt "https://github.com/mvdan/sh/releases/download/${SHFMT_VERSION}/shfmt_${SHFMT_VERSION}_linux_amd64" &&
+          chmod +x shfmt &&
+          ./shfmt -p -mn dnsmasq-web.env > dnsmasq-web.env.tmp &&
+                mv dnsmasq-web.env.tmp dnsmasq-web.env
 
       - name: Create checksums
         run: |
@@ -97,5 +135,6 @@ jobs:
           gh release upload "${{ github.ref_name }}" \
             --repo "${{ github.repository }}" \
             bin/*-${{ github.ref_name }}_* \
+            dnsmasq-web.env \
             checksums.txt checksums.txt.sig
 
