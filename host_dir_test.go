@@ -12,18 +12,29 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func setupRouterForReservationsTests() *gin.Engine {
+func setupRouterForReservationsTests() (*gin.Engine, string, func()) {
 	gin.SetMode(gin.TestMode)
 	r := gin.Default()
-	hostDir := "./test_hosts"
-	os.Mkdir(hostDir, 0755)
+
+	// Create temporary directory
+	hostDir, err := os.MkdirTemp("", "dnsmasq-web-test-*")
+	if err != nil {
+		panic(err)
+	}
+
 	DhcpHostDir(r, hostDir)
-	return r
+
+	// Return cleanup function
+	cleanup := func() {
+		os.RemoveAll(hostDir)
+	}
+
+	return r, hostDir, cleanup
 }
 
 func TestCreateReservation(t *testing.T) {
-	r := setupRouterForReservationsTests()
-	defer os.RemoveAll("./test_hosts")
+	r, hostDir, cleanup := setupRouterForReservationsTests()
+	defer cleanup()
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("POST", "/reservations", strings.NewReader(`{
@@ -37,12 +48,12 @@ func TestCreateReservation(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusCreated, w.Code)
-	assert.FileExists(t, filepath.Join("./test_hosts", "00:1a:2b:3c:4d:5e"))
+	assert.FileExists(t, filepath.Join(hostDir, "00:1a:2b:3c:4d:5e"))
 }
 
 func TestCreateMinimalReservation(t *testing.T) {
-	r := setupRouterForReservationsTests()
-	defer os.RemoveAll("./test_hosts")
+	r, hostDir, cleanup := setupRouterForReservationsTests()
+	defer cleanup()
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("POST", "/reservations", strings.NewReader(`{
@@ -53,12 +64,12 @@ func TestCreateMinimalReservation(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusCreated, w.Code)
-	assert.FileExists(t, filepath.Join("./test_hosts", "00:1a:2b:3c:4d:5e"))
+	assert.FileExists(t, filepath.Join(hostDir, "00:1a:2b:3c:4d:5e"))
 }
 
 func TestCreateReservationWithInvalidIPv4(t *testing.T) {
-	r := setupRouterForReservationsTests()
-	defer os.RemoveAll("./test_hosts")
+	r, _, cleanup := setupRouterForReservationsTests()
+	defer cleanup()
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("POST", "/reservations", strings.NewReader(`{
@@ -75,8 +86,8 @@ func TestCreateReservationWithInvalidIPv4(t *testing.T) {
 }
 
 func TestCreateReservationWithMissingMAC(t *testing.T) {
-	r := setupRouterForReservationsTests()
-	defer os.RemoveAll("./test_hosts")
+	r, _, cleanup := setupRouterForReservationsTests()
+	defer cleanup()
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("POST", "/reservations", strings.NewReader(`{
@@ -92,8 +103,8 @@ func TestCreateReservationWithMissingMAC(t *testing.T) {
 }
 
 func TestCreateReservationWithInvalidMAC(t *testing.T) {
-	r := setupRouterForReservationsTests()
-	defer os.RemoveAll("./test_hosts")
+	r, _, cleanup := setupRouterForReservationsTests()
+	defer cleanup()
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("POST", "/reservations", strings.NewReader(`{
@@ -110,8 +121,8 @@ func TestCreateReservationWithInvalidMAC(t *testing.T) {
 }
 
 func TestUpdateReservation(t *testing.T) {
-	r := setupRouterForReservationsTests()
-	defer os.RemoveAll("./test_hosts")
+	r, hostDir, cleanup := setupRouterForReservationsTests()
+	defer cleanup()
 
 	// First create a reservation
 	w := httptest.NewRecorder()
@@ -138,7 +149,7 @@ func TestUpdateReservation(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusCreated, w.Code)
-	content, _ := os.ReadFile(filepath.Join("./test_hosts", "00:1a:2b:3c:4d:5e"))
+	content, _ := os.ReadFile(filepath.Join(hostDir, "00:1a:2b:3c:4d:5e"))
 	assert.Contains(t, string(content), "192.168.1.101")
 	assert.Contains(t, string(content), "set:tag3")
 	assert.Contains(t, string(content), "updated-host")
@@ -146,8 +157,8 @@ func TestUpdateReservation(t *testing.T) {
 }
 
 func TestUpdateReservationNoTags(t *testing.T) {
-	r := setupRouterForReservationsTests()
-	defer os.RemoveAll("./test_hosts")
+	r, hostDir, cleanup := setupRouterForReservationsTests()
+	defer cleanup()
 
 	// First create a reservation
 	w := httptest.NewRecorder()
@@ -160,13 +171,13 @@ func TestUpdateReservationNoTags(t *testing.T) {
 	r.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusCreated, w.Code)
 
-	content, _ := os.ReadFile(filepath.Join("./test_hosts", "00:1a:2b:3c:4d:5e"))
+	content, _ := os.ReadFile(filepath.Join(hostDir, "00:1a:2b:3c:4d:5e"))
 	assert.Equal(t, "00:1a:2b:3c:4d:5e,192.168.1.100,test-host\n", string(content))
 }
 
 func TestDeleteReservation(t *testing.T) {
-	r := setupRouterForReservationsTests()
-	defer os.RemoveAll("./test_hosts")
+	r, hostDir, cleanup := setupRouterForReservationsTests()
+	defer cleanup()
 
 	// First create a reservation
 	w := httptest.NewRecorder()
@@ -180,7 +191,7 @@ func TestDeleteReservation(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusCreated, w.Code)
-	assert.FileExists(t, filepath.Join("./test_hosts", "00:1a:2b:3c:4d:5e"))
+	assert.FileExists(t, filepath.Join(hostDir, "00:1a:2b:3c:4d:5e"))
 
 	// Now delete the reservation
 	w = httptest.NewRecorder()
@@ -188,12 +199,12 @@ func TestDeleteReservation(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
-	assert.NoFileExists(t, filepath.Join("./test_hosts", "00:1a:2b:3c:4d:5e"))
+	assert.NoFileExists(t, filepath.Join(hostDir, "00:1a:2b:3c:4d:5e"))
 }
 
 func TestDeleteNonexistentReservation(t *testing.T) {
-	r := setupRouterForReservationsTests()
-	defer os.RemoveAll("./test_hosts")
+	r, _, cleanup := setupRouterForReservationsTests()
+	defer cleanup()
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("DELETE", "/reservations/00:1A:2B:3C:4D:5E", nil)
@@ -202,8 +213,8 @@ func TestDeleteNonexistentReservation(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 func TestGetAllReservations(t *testing.T) {
-	r := setupRouterForReservationsTests()
-	defer os.RemoveAll("./test_hosts")
+	r, _, cleanup := setupRouterForReservationsTests()
+	defer cleanup()
 
 	// Create a few reservations
 	reservations := []string{
@@ -230,8 +241,8 @@ func TestGetAllReservations(t *testing.T) {
 }
 
 func TestGetReservation(t *testing.T) {
-	r := setupRouterForReservationsTests()
-	defer os.RemoveAll("./test_hosts")
+	r, _, cleanup := setupRouterForReservationsTests()
+	defer cleanup()
 
 	// Create a reservation
 	w := httptest.NewRecorder()
@@ -259,8 +270,8 @@ func TestGetReservation(t *testing.T) {
 }
 
 func TestGetNonexistentReservation(t *testing.T) {
-	r := setupRouterForReservationsTests()
-	defer os.RemoveAll("./test_hosts")
+	r, _, cleanup := setupRouterForReservationsTests()
+	defer cleanup()
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/reservations/00:1A:2B:3C:4D:5E", nil)
@@ -270,8 +281,8 @@ func TestGetNonexistentReservation(t *testing.T) {
 }
 
 func TestGetReservationWithInvalidMAC(t *testing.T) {
-	r := setupRouterForReservationsTests()
-	defer os.RemoveAll("./test_hosts")
+	r, _, cleanup := setupRouterForReservationsTests()
+	defer cleanup()
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/reservations/00:1A:2B:3C:4D:5G", nil)
