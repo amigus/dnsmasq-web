@@ -42,7 +42,7 @@ jobs:
           output: $repo-${{ github.ref_name }}_$target$ext
 
       - name: Upload Release Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: binaries-${{ matrix.targets }}
           path: |
