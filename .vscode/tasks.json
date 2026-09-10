@@ -1,0 +1,38 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "build-debug",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"scripts/build.sh",
+				"debug"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "smoke-debug",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"./dist/debug/dnsmasq-web --help >/tmp/dnsmasq-web-help.txt && ./dist/debug/dnsmasq-web server -V >/tmp/dnsmasq-web-version.txt && test -s /tmp/dnsmasq-web-help.txt && test -s /tmp/dnsmasq-web-version.txt"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "build-release",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"scripts/build.sh",
+				"release"
+			],
+			"isBackground": false,
+			"group": "build"
+		}
+	]
+}

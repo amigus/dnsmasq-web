@@ -9,7 +9,20 @@
             "type": "go",
             "request": "launch",
             "mode": "auto",
-            "program": "${workspaceFolder}"
+            "program": "${workspaceFolder}",
+            "args":[
+                "server",
+                "-v",
+                "-f",
+                "./leases.db",
+                "-h",
+                "./reservations.d",
+                "-d",
+                "-P",
+                "./dnsmasq-web.pid",
+                "-S",
+                "./dnsmasq-web.sock"
+            ]
         }
     ]
 }
