@@ -1,6 +1,10 @@
-# Dnsmasq Web UNIX/Linux shell client
+# Dnsmasq Web Legacy Shell Helpers
 
-A composable collection of POSIX shell scripts that constitute a client of Dnsmasq Web.
+These POSIX shell scripts are legacy reference material.
+They are no longer built into release artifacts and are no longer the recommended client interface.
+Use the unified `dnsmasq-web` binary instead.
+
+The notes below are kept only to document the old helper behavior while the scripts remain in-tree.
 
 ## use.sh
 
