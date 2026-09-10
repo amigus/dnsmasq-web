@@ -14,7 +14,7 @@ import (
 func TestTokenCheckerHeader(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	ttc := NewTokenChecker(1, 1, time.Hour)
+	ttc := NewTokenChecker(1, 2, time.Hour)
 
 	validToken := ttc.Get()
 	r = TokenCheckerHeader(r, ttc, "X-Token")
@@ -27,6 +27,30 @@ func TestTokenCheckerHeader(t *testing.T) {
 	req.Header.Set("X-Token", validToken)
 	r.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusOK, w.Code, "Expected status OK for valid token")
+}
+
+func TestTokenCheckerHeaderRejectsExhaustedToken(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	ttc := NewTokenChecker(1, 1, time.Hour)
+	validToken := ttc.Get()
+	r = TokenCheckerHeader(r, ttc, "X-Token")
+
+	r.GET("/", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("X-Token", validToken)
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code, "Expected the first use to succeed")
+
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("X-Token", validToken)
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusUnauthorized, w.Code, "Expected an exhausted token to be rejected")
 }
 
 func TestTokenCheckerHeaderWithInvalidToken(t *testing.T) {
@@ -50,12 +74,7 @@ func TestTokenCheckerHeaderWithInvalidToken(t *testing.T) {
 func TestTokenCheckerPublisher(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	ttc := &tokenChecker{
-		tokens:   make([]token, 1),
-		maxUses:  5,
-		maxTime:  time.Minute,
-		maxCount: 1,
-	}
+	ttc := NewTokenChecker(1, 5, time.Minute)
 
 	r = TokenCheckerPublisher(r, ttc, "/")
 
