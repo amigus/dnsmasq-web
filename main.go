@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	cmdpkg "github.com/amigus/dnsmasq-web/cmd"
 	"github.com/gin-gonic/gin"
 	_ "github.com/mattn/go-sqlite3"
 	"gorm.io/driver/sqlite"
@@ -29,6 +30,17 @@ const (
 var Version string = "development # 2030-12-31 (unknown@unknown)"
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "server" {
+		// `dnsmasq-web server ...` routes to the existing server flags/behavior.
+		os.Args = append([]string{os.Args[0]}, os.Args[2:]...)
+		runServerMain()
+		return
+	}
+
+	cmdpkg.Execute()
+}
+
+func runServerMain() {
 	name := filepath.Base(os.Args[0])
 
 	var databaseFilePath, hostDirPath, listenOn, pidFilePath, unixSocketPath, userFlag, groupFlag string
@@ -235,7 +247,6 @@ Setting -T 0 disables token checking entirely.
 					// Serve the TokenPublisher over a Unix domain socket
 					if err := TokenCheckerPublisher(gin.Default(), ttc, tokenEndpointPath).RunFd(4); err != nil {
 						fmt.Fprintf(os.Stderr, "unable to serve on unix socket: %v\n", err)
-						os.Exit(1)
 					}
 				}()
 			}
@@ -244,13 +255,15 @@ Setting -T 0 disables token checking entirely.
 			// Run on the open socket; 3 because 0, 1 and 2 are stdin, stdout and stderr
 			if err := r.RunFd(3); err != nil {
 				fmt.Fprintf(os.Stderr, "unable to listen on already open socket: %v\n", err)
+				os.Exit(1)
 			}
 		} else {
 			// Without -d and not as the child process, i.e., in the foreground
 			if err := r.Run(listenOn); err != nil {
 				fmt.Fprintf(os.Stderr, "unable to listen on '%s': %v\n", listenOn, err)
+				os.Exit(1)
 			}
 		}
-		os.Exit(1)
+		return
 	}
 }
