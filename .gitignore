@@ -5,3 +5,8 @@ dnsmasq-web
 dnsmasq-web.sh
 dnsmasq-web-amd64
 dnsmasq-web-arm64
+dnsmasq-web-cli
+dnsmasq-web.env
+dist/
+.toolchains/
+.release-inner.log
