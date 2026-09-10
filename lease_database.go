@@ -260,7 +260,10 @@ func LeaseDatabase(r *gin.Engine, db *gorm.DB) *gin.Engine {
 			Requests int    `json:"requests"`
 			IPv4s    string `json:"ipv4s"`
 		}
-		query.Scan(&queryResults)
+		if err := query.Scan(&queryResults).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
 
 		// Convert the comma-separated IPv4s string to a slice of strings
 		var results []ClientRequests = make([]ClientRequests, len(queryResults))
@@ -321,7 +324,10 @@ func LeaseDatabase(r *gin.Engine, db *gorm.DB) *gin.Engine {
 		if query, ok = whereSince(c, query, time.Time{}, "since", "r.received", false); !ok {
 			return
 		}
-		query.Debug().Scan(&lastIPs)
+		if err := query.Scan(&lastIPs).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
 
 		type groupedResult struct {
 			Mac              string `json:"mac"`
