@@ -4,159 +4,106 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
-	"strings"
-	"time"
+	"path/filepath"
+	"strconv"
+	"syscall"
 )
 
 const Name = "dnsmasq-web"
 
-var Default = All
+var Default = Debug
 
-// Get the build info from git and add a datetime stamp
-func buildInfo() (string, error) {
-	// Get the git describe output
-	cmd := exec.Command("git", "describe", "--tags", "--always")
-	output, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("failed to get build info: %v", err)
-	}
-	gitInfo := strings.TrimSpace(string(output))
-
-	// Get the current datetime
-	datetime := time.Now().Format(time.RFC1123)
-
-	// Get the build user
-	user := os.Getenv("USER")
-	hostname := os.Getenv("HOSTNAME")
-
-	// Combine git info and datetime
-	buildInfo := fmt.Sprintf("%s built %s by %s@%s", gitInfo, datetime, user, hostname)
-	return buildInfo, nil
-}
-
-// Run the go build command
-func runBuild(name string, envVars ...string) error {
-	buildInfo, err := buildInfo()
-	if err != nil {
-		return err
-	}
-	cmd := exec.Command("go", "build", "-buildmode=pie", "-ldflags",
-		fmt.Sprintf("-w -s -X 'main.Version=%s'", buildInfo), "-o", name)
-	if len(envVars) > 0 {
-		cmd.Env = append(os.Environ(), envVars...)
-	} else {
-		cmd.Env = os.Environ()
-	}
+func runBuildScript(args ...string) error {
+	cmd := exec.Command("bash", append([]string{"scripts/build.sh"}, args...)...)
+	cmd.Env = os.Environ()
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
 
-// Build the client POSIX shell environment
-func createClientEnv(full, minify bool) error {
-	scripts := []string{"use.sh", "token.sh", "curl.sh"}
-
-	if full {
-		scripts = append(scripts, "curl_jq.sh", "jq_commands.sh", "reservations.sh")
-	}
-
-	var script bytes.Buffer
-
-	script.WriteString("# Dnsmasq Web Client environment")
-	for _, scriptName := range scripts {
-		content, err := os.ReadFile("cli/" + scriptName)
-		if err != nil {
-			return fmt.Errorf("failed to read %s: %v", scriptName, err)
-		}
-
-		lines := strings.Split(string(content), "\n")
-		for _, line := range lines {
-			if !strings.HasPrefix(line, "#!") {
-				script.WriteString(line + "\n")
-			}
-		}
-	}
-
-	cmdArgs := []string{"shfmt", "-p"}
-	if minify {
-		cmdArgs = append(cmdArgs, "-mn")
-	}
-	cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
-	cmd.Stdin = &script
-	output, err := cmd.Output()
-	if err != nil {
-		return fmt.Errorf("failed to minify script: %v", err)
-	}
-
-	return os.WriteFile(fmt.Sprintf("%s.env", Name), output, 0755)
+func Debug() error {
+	return runBuildScript("debug")
 }
 
-// Build the client environment
-func ClientEnv() error {
-	return createClientEnv(false, true)
+func Release() error {
+	return runBuildScript("release")
 }
 
-// Build the full client environment
-func FullClientEnv() error {
-	return createClientEnv(true, false)
+func PrepareReleaseImage() error {
+	return runBuildScript("prepare-release-image")
 }
 
-// Build binaries for pre-selected architectures
 func Binaries() error {
-	for _, combo := range []struct {
-		CC     string
-		GOARCH string
-		Name   string
-	}{
-		{"gcc", "amd64", "dnsmasq-web-amd64"},
-		{"aarch64-suse-linux-gcc", "arm64", "dnsmasq-web-arm64"},
-	} {
-		envVars := []string{
-			"CC=" + combo.CC,
-			"CGO_ENABLED=1",
-			"GOARCH=" + combo.GOARCH,
-			"GOOS=linux",
-		}
-		if err := runBuild(combo.Name, envVars...); err != nil {
-			return err
-		}
-	}
-	return nil
+	return Release()
 }
 
-// Build the client environment and the binaries
 func All() error {
-	if err := ClientEnv(); err != nil {
-		return err
-	}
-	return Binaries()
+	return Debug()
 }
 
 func CleanBinaries() error {
-	for _, output := range []string{
-		"dnsmasq-web-amd64",
-		"dnsmasq-web-arm64",
-	} {
-		if err := os.RemoveAll(output); err != nil {
+	return runBuildScript("clean")
+}
+
+func CleanDaemonFiles() error {
+	debugDir := filepath.Join("dist", "debug")
+	for _, extension := range []string{"pid", "sock"} {
+		if err := os.RemoveAll(filepath.Join(debugDir, fmt.Sprintf("%s.%s", Name, extension))); err != nil {
 			return err
 		}
+	}
+	if err := os.RemoveAll(filepath.Join(debugDir, "reservations.d")); err != nil {
+		return err
 	}
 	return nil
 }
 
-func CleanClientEnv() error {
-	return os.RemoveAll(fmt.Sprintf("%s.env", Name))
-}
-
 func Clean() {
-	if err := CleanClientEnv(); err != nil {
-		fmt.Println(err)
-	}
 	if err := CleanBinaries(); err != nil {
 		fmt.Println(err)
 	}
+	if err := CleanDaemonFiles(); err != nil {
+		fmt.Println(err)
+	}
+}
+
+func Kill() error {
+	// Get the PID from the file
+	if pidStr, err := os.ReadFile(filepath.Join("dist", "debug", fmt.Sprintf("%s.pid", Name))); err != nil {
+		return fmt.Errorf("failed to read PID file: %v", err)
+	} else if pid, err := strconv.Atoi(string(pidStr)); err != nil {
+		return fmt.Errorf("failed to convert PID to integer: %v", err)
+	} else {
+		return syscall.Kill(pid, syscall.SIGTERM)
+	}
+}
+
+func Stop() error {
+	if err := Kill(); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to stop daemon: %v\n", err)
+	}
+	return CleanDaemonFiles()
+}
+
+func Start() error {
+	if err := Debug(); err != nil {
+		return err
+	}
+	cwd, _ := os.Getwd()
+	debugDir := filepath.Join(cwd, "dist", "debug")
+	cmdName := filepath.Join(debugDir, Name)
+	fileNameOf := func(extension string) string {
+		return filepath.Join(debugDir, fmt.Sprintf("%s.%s", Name, extension))
+	}
+	if err := os.MkdirAll(filepath.Join(debugDir, "reservations.d"), 0755); err != nil {
+		return err
+	}
+	cmd := exec.Command(cmdName, "server", "-v", "-f", "leases.db", "-h", "reservations.d", "-d", "-S", fileNameOf("sock"), "-P", fileNameOf("pid"))
+	cmd.Dir = debugDir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
