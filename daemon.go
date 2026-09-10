@@ -14,27 +14,55 @@ import (
 // id returns the UID and GID for the given user and group which can be either identifiers or names
 func id(u, g string) (uint32, uint32, error) {
 	var uid, gid int
-	if g != "" {
-		if grp, err := user.LookupGroup(g); err == nil {
-			if gid, err = strconv.Atoi(grp.Gid); err != nil {
-				return 0, 0, fmt.Errorf("invalid GID for group %s: %v", g, err)
+	lookupGroup := func(value string) (int, error) {
+		if parsed, err := strconv.Atoi(value); err == nil {
+			return parsed, nil
+		}
+		grp, err := user.LookupGroup(value)
+		if err != nil {
+			return 0, fmt.Errorf("failed to lookup group %s: %v", value, err)
+		}
+		parsed, err := strconv.Atoi(grp.Gid)
+		if err != nil {
+			return 0, fmt.Errorf("invalid GID for group %s: %v", value, err)
+		}
+		return parsed, nil
+	}
+	lookupUser := func(value string) (*user.User, int, error) {
+		if parsed, err := strconv.Atoi(value); err == nil {
+			usr, err := user.LookupId(value)
+			if err != nil {
+				return nil, 0, fmt.Errorf("failed to lookup user %s: %v", value, err)
 			}
+			return usr, parsed, nil
+		}
+		usr, err := user.Lookup(value)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to lookup user %s: %v", value, err)
+		}
+		parsed, err := strconv.Atoi(usr.Uid)
+		if err != nil {
+			return nil, 0, fmt.Errorf("invalid UID for user %s: %v", value, err)
+		}
+		return usr, parsed, nil
+	}
+	if g != "" {
+		if parsed, err := lookupGroup(g); err == nil {
+			gid = parsed
 		} else {
-			return 0, 0, fmt.Errorf("failed to lookup group %s: %v", g, err)
+			return 0, 0, err
 		}
 	}
 	if u != "" {
-		if usr, err := user.Lookup(u); err == nil {
-			if uid, err = strconv.Atoi(usr.Uid); err != nil {
-				return 0, 0, fmt.Errorf("invalid UID for user %s: %v", u, err)
-			}
+		if usr, parsedUID, err := lookupUser(u); err == nil {
+			uid = parsedUID
 			if g == "" {
 				if gid, err = strconv.Atoi(usr.Gid); err != nil {
 					return 0, 0, fmt.Errorf("invalid GID for user %s: %v", u, err)
 				}
 			}
 		} else {
-			return 0, 0, fmt.Errorf("failed to lookup user %s: %v", u, err)
+			return 0, 0, err
 		}
 	}
 	return uint32(uid), uint32(gid), nil
