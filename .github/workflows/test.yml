@@ -17,3 +17,20 @@ jobs:
           go-version-file: "go.mod"
 
       - run: go test -v ./...
+
+  build-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: "go.mod"
+
+      - name: Build debug binary
+        run: bash scripts/build.sh debug
+
+      - name: Smoke test unified binary
+        run: |
+          ./dist/debug/dnsmasq-web --help >/tmp/dnsmasq-web-help.txt
+          ./dist/debug/dnsmasq-web reservations --help >/tmp/dnsmasq-web-reservations-help.txt
+          ./dist/debug/dnsmasq-web server -V >/tmp/dnsmasq-web-version.txt
