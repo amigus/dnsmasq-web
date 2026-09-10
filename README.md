@@ -3,9 +3,9 @@
 [![Release](https://github.com/amigus/dnsmasq-web/actions/workflows/release.yml/badge.svg)](https://github.com/amigus/dnsmasq-web/actions/workflows/release.yml)
 [![Run Tests](https://github.com/amigus/dnsmasq-web/actions/workflows/test.yml/badge.svg)](https://github.com/amigus/dnsmasq-web/actions/workflows/test.yml)
 
-A JSON/HTTP interface for Dnsmasq and client interface written in POSIX shell.
+A unified server and CLI for Dnsmasq.
 It extends Dnsmasq using the `dhcp-script` and `dhcp-hostsdir` configuration parameters.
-The script maintains client, lease and request information in an
+The daemon maintains client, lease and request information in an
 [SQLite](https://www.sqlite.org/index.html)
 [database](https://gist.github.com/amigus/6a9e4151d175d04bf05337b815f2213e).
 The DHCP reservation data is stored in files under the host directory.
@@ -14,49 +14,52 @@ The DHCP reservation data is stored in files under the host directory.
 
 1. Add the [database](https://gist.github.com/amigus/6a9e4151d175d04bf05337b815f2213e) to the DHCP server.
 1. Download the appropriate binary from the [releases](https://github.com/amigus/dnsmasq-web/releases/latest) page to the DHCP server.
-1. Run it, e.g., `dnsmasq-web` or as a daemon with `sudo dnsmasq-web -d -l :80 -T 0`.
+1. Run the API server with `dnsmasq-web server`, for example `sudo dnsmasq-web server -d -l :80 -T 0`.
 
-## Client
+## Local Builds
 
-The [cli](cli) directory contains a client interface written in POSIX shell.
+- `bash scripts/build.sh debug` builds the host-architecture debug binary at `dist/debug/dnsmasq-web`.
+- `mage` is a thin wrapper around the same debug build.
+- `bash scripts/build.sh release` builds the supported Linux release artifacts at `dist/release/`.
+- Local release builds use Docker by default so local output matches CI artifact targets and naming.
+- On a developer machine, the first release build prepares a reusable Docker image and persistent Go cache volumes; later release builds reuse them instead of reinstalling packages and redownloading modules from scratch.
+- You can prebuild that reusable image explicitly with `bash scripts/build.sh prepare-release-image` or `mage prepareReleaseImage`.
+- Set `DNSMASQ_WEB_PREPARED_RELEASE_IMAGE=0` to force the old disposable-container behavior.
 
-The scripts define functions when sourced into the environment, e.g.:
+## CLI
 
-```sh
-. /path/to/dnsmasq-web.env
-dnsmasq_web_curl addresses/bc:32:b2:3b:13:d4 | jq
-[
-  {
-    "ipv4": "192.168.1.9",
-    "first_seen": "2024-09-03 10:07:21",
-    "last_seen": "2024-09-03 12:37:22",
-    "requested_options": "",
-    "hostname": "Adam-s-Phone",
-    "vendor_class": "android-dhcp-14"
-  }
-]
+The same `dnsmasq-web` binary provides the API client commands.
+Run the server with `dnsmasq-web server ...`; all other subcommands are client operations, for example:
+
+```bash
+dnsmasq-web leases
+dnsmasq-web clients --since 2024-09-01
+dnsmasq-web reservations list --output json
+dnsmasq-web addresses bc:32:b2:3b:13:d4 --output json | jq
 ```
+
+See `CLI.md` for the full client command reference.
+
+The legacy shell helpers in `cli/` are retained only as reference material and are no longer built or released.
 
 ## Endpoints
 
-| Endpoint       | Method | Query Parameter         | Required | Description                                      |
-|----------------|--------|-------------------------|----------|--------------------------------------------------|
-| **/reservations** |     |                         |          |                                                  |
-|                | GET    | mac                     | No       | Retrieve one or the entire list of reservations  |
-|                | POST   |                         |          | Create a new reservation                         |
-|                | PUT    | mac                     | Yes      | Update an existing reservation by MAC address    |
-|                | DELETE | mac                     | Yes      | Delete a reservation by MAC address              |
-| **/leases**    |        |                         |          |                                                  |
-|                | GET    |                         |          | Retrieve lease information                       |
-| **/clients**   |        |                         |          |                                                  |
-|                | GET    | since=YYYY-mm-dd        | No       | Retrieve clients, optionally filtered by a date  |
-| **/addresses** |        |                         |          |                                                  |
-|                | GET    |                         |          | Retrieve IPv4 addresses used by a MAC address    |
-| **/devices**   |        |                         |          |                                                  |
-|                | GET    |                         |          | Retrieve MACs that used a specific IPv4 address  |
-| **/requests**  |        |                         |          |                                                  |
-|                | GET    | cidr                    | Yes      | Retrieve requests filtered by CIDR               |
-|                | GET    | range                   | Yes      | Retrieve requests filtered by range              |
+- `/reservations`
+  GET with optional `mac`: retrieve one or the entire list of reservations.
+  POST: create a new reservation.
+  PUT with `mac`: update an existing reservation by MAC address.
+  DELETE with `mac`: delete a reservation by MAC address.
+- `/leases`
+  GET: retrieve lease information.
+- `/clients`
+  GET with optional `since=YYYY-mm-dd`: retrieve clients, optionally filtered by a date.
+- `/addresses`
+  GET: retrieve IPv4 addresses used by a MAC address.
+- `/devices`
+  GET: retrieve MACs that used a specific IPv4 address.
+- `/requests`
+  GET with `cidr`: retrieve requests filtered by CIDR.
+  GET with `range`: retrieve requests filtered by range.
 
 ## Examples
 
@@ -219,35 +222,36 @@ and a token publishing endpoint.
 ```bash
 -T int
         the maximum number of tokens to issue at a time (0 disables token checking) (default 1)
--c int
+ -c int
         the maximum number of times a token can be used (the default 0 means unlimited)
 -t duration
         the duration a token is valid (the default 0 means forever)
 ```
 
-Thus, by default, it generates a single token with unlimited reuse forever.
+Example:
+
+To use a single token with unlimited reuse forever, run:
 
 ```bash
-dnsmasq-web -d -l :867
+dnsmasq-web server -d -l :80
 ```
 
 For 3 tokens that expire after 8 hours, run:
 
 ```bash
-dnsmasq-web -d -l :867 -T 3 -t 8h
+dnsmasq-web server -d -l :80 -T 3 -t 8h
 ```
 
 For 10 token single-use tokens that expire after a 30 days, run:
 
 ```bash
-dnsmasq-web -d -l :867 -T 10 -c 1 -t $((24*30))h
+dnsmasq-web server -d -l :80 -T 10 -c 1 -t $((24*30))h
 ```
 
 ### Use
 
-The token is sent via the `Authorization` HTTP request header.
-
-It publishes tokens on the `/run/dnsmasq-web.sock` UNIX socket by default.
+The server expects the token to be in the `X-Token` header of the request.
+It publishes tokens on a UNIX domain socket at `/run/dnsmasq-web.sock` by default.
 
 Getting the token from there is straight-forward with cURL:
 
@@ -256,12 +260,14 @@ curl -s --unix-socket /run/dnsmasq-web.sock ./
 ffab9080-0197-43c4-895a-80eff055d428
 # save it to a variable
 token=$(curl -s --unix-socket /run/dnsmasq-web.sock ./)
+# create the header
+header = "X-Token: $token"
 # use cURL
-curl -H "Authorization: $token" -s http://dhcp/leases
+curl -H "$header" -s http://dhcp/leases
 ```
 
 These steps can be combined with SSH to allow remote access with tokens:
 
 ```bash
-curl -H "Authorization: $(ssh -ntq server curl -s --unix-socket /run/dnsmasq-web.sock .)" -s http://dhcp/leases
+curl -H "X-Token: $(ssh -ntq dhcp curl -s --unix-socket /run/dnsmasq-web.sock .)" -s http://dhcp/leases
 ```
