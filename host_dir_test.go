@@ -53,7 +53,11 @@ func TestCreateMinimalReservation(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusCreated, w.Code)
-	assert.FileExists(t, filepath.Join("./test_hosts", "00:1a:2b:3c:4d:5e"))
+	filePath := filepath.Join("./test_hosts", "00:1a:2b:3c:4d:5e")
+	assert.FileExists(t, filePath)
+	content, err := os.ReadFile(filePath)
+	assert.NoError(t, err)
+	assert.Equal(t, "00:1a:2b:3c:4d:5e,192.168.1.100", string(content))
 }
 
 func TestCreateReservationWithInvalidIPv4(t *testing.T) {
@@ -161,7 +165,7 @@ func TestUpdateReservationNoTags(t *testing.T) {
 	assert.Equal(t, http.StatusCreated, w.Code)
 
 	content, _ := os.ReadFile(filepath.Join("./test_hosts", "00:1a:2b:3c:4d:5e"))
-	assert.Equal(t, "00:1a:2b:3c:4d:5e,192.168.1.100,test-host\n", string(content))
+	assert.Equal(t, "00:1a:2b:3c:4d:5e,192.168.1.100,test-host", string(content))
 }
 
 func TestDeleteReservation(t *testing.T) {
@@ -256,6 +260,33 @@ func TestGetReservation(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "192.168.1.100")
 	assert.Contains(t, w.Body.String(), "host1")
 	assert.Contains(t, w.Body.String(), "24h")
+}
+
+func TestGetReservationWithMultipleTags(t *testing.T) {
+	r := setupRouterForReservationsTests()
+	defer os.RemoveAll("./test_hosts")
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/reservations", strings.NewReader(`{
+		"mac": "00:1A:2B:3C:4D:5E",
+		"ipv4": "192.168.1.100",
+		"tags": ["tag1", "tag2"],
+		"hostname": "host1",
+		"lease_time": "24h"
+	}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusCreated, w.Code)
+
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest("GET", "/reservations/00:1A:2B:3C:4D:5E", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), "192.168.1.100")
+	assert.Contains(t, w.Body.String(), "tag1")
+	assert.Contains(t, w.Body.String(), "tag2")
+	assert.NotContains(t, w.Body.String(), "set:tag2\",\"ipv4\":\"set:tag2")
 }
 
 func TestGetNonexistentReservation(t *testing.T) {

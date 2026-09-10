@@ -2,12 +2,11 @@ package main
 
 import (
 	"bufio"
-	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 
+	"github.com/amigus/dnsmasq-web/internal/reservations"
 	"github.com/gin-gonic/gin"
 	"github.com/seancfoley/ipaddress-go/ipaddr"
 )
@@ -47,31 +46,26 @@ func createReservationFile(input reservation, c *gin.Context, hostDir string, ov
 		return
 	}
 
-	content := mac.ToColonDelimitedString()
-
-	if len(input.Tags) > 0 {
-		content += "," + strings.Join(prefixTags(input.Tags), ",")
-	}
-	if ipv4, err := validateIPv4(input.IPv4); err != nil {
+	ipv4, err := validateIPv4(input.IPv4)
+	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid IPv4 address"})
 		return
-	} else {
-		content += "," + ipv4.String()
 	}
-	if input.Hostname != "" {
-		content += "," + input.Hostname
-	}
-	if input.LeaseTime != "" {
-		content += "," + input.LeaseTime
-	}
-	content += "\n"
+
+	fileContent := reservations.Format(reservations.FileRecord{
+		MAC:       mac.ToColonDelimitedString(),
+		Tags:      input.Tags,
+		IPv4:      ipv4.String(),
+		Hostname:  input.Hostname,
+		LeaseTime: input.LeaseTime,
+	})
 
 	filePath := filepath.Join(hostDir, mac.ToNormalizedString())
 	if _, err := os.Stat(filePath); err == nil && !overwrite {
 		c.JSON(http.StatusConflict, gin.H{"error": "exists"})
 		return
 	}
-	if err := os.WriteFile(filePath, []byte(content), 0640); err != nil {
+	if err := os.WriteFile(filePath, []byte(fileContent), 0640); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -112,37 +106,19 @@ func readReservationFile(mac string, hostDir string) (reservation, error) {
 
 	scanner := bufio.NewScanner(file)
 	if scanner.Scan() {
-		line := scanner.Text()
-		parts := strings.Split(line, ",")
-		if len(parts) < 3 {
-			return reservation{}, fmt.Errorf("invalid file format")
+		record, err := reservations.Parse(scanner.Text())
+		if err != nil {
+			return reservation{}, err
 		}
 
 		res := reservation{
-			MAC: parts[0],
+			MAC: record.MAC,
 			reservationData: reservationData{
-				Tags:      []string{},
-				IPv4:      parts[1],
-				Hostname:  "",
-				LeaseTime: "",
+				Tags:      record.Tags,
+				IPv4:      record.IPv4,
+				Hostname:  record.Hostname,
+				LeaseTime: record.LeaseTime,
 			},
-		}
-		if strings.HasPrefix(parts[1], "set:") {
-			res.Tags = strings.Split(strings.Replace(parts[1], "set:", "", 1), ",")
-			res.IPv4 = parts[2]
-			if len(parts) > 3 {
-				res.Hostname = parts[3]
-			}
-			if len(parts) > 4 {
-				res.LeaseTime = parts[4]
-			}
-		} else {
-			if len(parts) > 2 {
-				res.Hostname = parts[2]
-			}
-			if len(parts) > 3 {
-				res.LeaseTime = parts[3]
-			}
 		}
 
 		return res, nil
@@ -180,14 +156,10 @@ func getReservationFile(c *gin.Context, hostDir string) {
 			if !info.IsDir() {
 				macAddr, err := validateMAC(info.Name())
 				if err == nil {
-					file, err := os.Open(path)
-					if err != nil {
-						return err
-					}
-					defer file.Close()
-
 					if res, err := readReservationFile(macAddr.ToNormalizedString(), hostDir); err == nil {
 						reservations = append(reservations, res)
+					} else {
+						return err
 					}
 				}
 			}
@@ -199,13 +171,6 @@ func getReservationFile(c *gin.Context, hostDir string) {
 		}
 		c.JSON(http.StatusOK, reservations)
 	}
-}
-
-func prefixTags(tags []string) []string {
-	for i, tag := range tags {
-		tags[i] = "set:" + tag
-	}
-	return tags
 }
 
 func DhcpHostDir(r *gin.Engine, hostDir string) *gin.Engine {
