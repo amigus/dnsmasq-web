@@ -20,11 +20,11 @@ func id(u, g string) (uint32, uint32, error) {
 		}
 		grp, err := user.LookupGroup(value)
 		if err != nil {
-			return 0, fmt.Errorf("failed to lookup group %s: %v", value, err)
+			return 0, fmt.Errorf("failed to lookup group %s: %w", value, err)
 		}
 		parsed, err := strconv.Atoi(grp.Gid)
 		if err != nil {
-			return 0, fmt.Errorf("invalid GID for group %s: %v", value, err)
+			return 0, fmt.Errorf("invalid GID for group %s: %w", value, err)
 		}
 		return parsed, nil
 	}
@@ -32,17 +32,17 @@ func id(u, g string) (uint32, uint32, error) {
 		if parsed, err := strconv.Atoi(value); err == nil {
 			usr, err := user.LookupId(value)
 			if err != nil {
-				return nil, 0, fmt.Errorf("failed to lookup user %s: %v", value, err)
+				return nil, 0, fmt.Errorf("failed to lookup user %s: %w", value, err)
 			}
 			return usr, parsed, nil
 		}
 		usr, err := user.Lookup(value)
 		if err != nil {
-			return nil, 0, fmt.Errorf("failed to lookup user %s: %v", value, err)
+			return nil, 0, fmt.Errorf("failed to lookup user %s: %w", value, err)
 		}
 		parsed, err := strconv.Atoi(usr.Uid)
 		if err != nil {
-			return nil, 0, fmt.Errorf("invalid UID for user %s: %v", value, err)
+			return nil, 0, fmt.Errorf("invalid UID for user %s: %w", value, err)
 		}
 		return usr, parsed, nil
 	}
@@ -58,7 +58,7 @@ func id(u, g string) (uint32, uint32, error) {
 			uid = parsedUID
 			if g == "" {
 				if gid, err = strconv.Atoi(usr.Gid); err != nil {
-					return 0, 0, fmt.Errorf("invalid GID for user %s: %v", u, err)
+					return 0, 0, fmt.Errorf("invalid GID for user %s: %w", u, err)
 				}
 			}
 		} else {
@@ -71,9 +71,9 @@ func id(u, g string) (uint32, uint32, error) {
 // Listen returns the listener file descriptor
 func Listen(on string) (*os.File, error) {
 	if listener, err := net.Listen("tcp", on); err != nil {
-		return nil, fmt.Errorf("unable to listen on %s: %v", on, err)
+		return nil, fmt.Errorf("unable to listen on %s: %w", on, err)
 	} else if file, err := listener.(*net.TCPListener).File(); err != nil {
-		return nil, fmt.Errorf("unable to get listener file: %v", err)
+		return nil, fmt.Errorf("unable to get listener file: %w", err)
 	} else {
 		return file, nil
 	}
