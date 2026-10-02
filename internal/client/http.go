@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/go-resty/resty/v2"
 )
@@ -37,9 +38,9 @@ func NewClient(cfg *Config) (*Client, error) {
 
 	restyClient := resty.New().
 		SetBaseURL(fmt.Sprintf("http://%s", cfg.Server)).
-		SetTimeout(30 * 1e9). // 30 seconds
+		SetTimeout(30 * time.Second).
 		SetRetryCount(2).
-		SetRetryWaitTime(1 * 1e9)
+		SetRetryWaitTime(time.Second)
 
 	c := &Client{
 		config:        cfg,
@@ -85,7 +86,7 @@ func (c *Client) retryCondition(r *resty.Response, _ error) bool {
 }
 
 // do performs an HTTP request and handles error responses.
-func (c *Client) do(method, endpoint string, body interface{}, result interface{}) error {
+func (c *Client) do(method, endpoint string, body any, result any) error {
 	req := c.restyClient.R()
 
 	if body != nil {
@@ -101,7 +102,7 @@ func (c *Client) do(method, endpoint string, body interface{}, result interface{
 	// Handle 4xx and 5xx responses
 	if resp.StatusCode() >= 400 {
 		// Try to parse error response
-		var errResp map[string]interface{}
+		var errResp map[string]any
 		if err := json.Unmarshal(resp.Body(), &errResp); err == nil {
 			if errMsg, ok := errResp["error"]; ok {
 				return fmt.Errorf("server error (HTTP %d): %v", resp.StatusCode(), errMsg)
@@ -202,7 +203,7 @@ func (c *Client) GetReservation(mac string) (*Reservation, error) {
 
 // CreateReservation creates a new reservation.
 func (c *Client) CreateReservation(mac, ipv4, hostname string, tags []string, leaseTime string) (*Reservation, error) {
-	req := map[string]interface{}{
+	req := map[string]any{
 		"mac":  mac,
 		"ipv4": ipv4,
 	}
@@ -225,7 +226,7 @@ func (c *Client) CreateReservation(mac, ipv4, hostname string, tags []string, le
 }
 
 // UpdateReservation updates an existing reservation by MAC.
-func (c *Client) UpdateReservation(mac string, update map[string]interface{}) (*Reservation, error) {
+func (c *Client) UpdateReservation(mac string, update map[string]any) (*Reservation, error) {
 	endpoint := fmt.Sprintf("/reservations/%s", mac)
 	if err := c.do("PUT", endpoint, update, nil); err != nil {
 		return nil, err

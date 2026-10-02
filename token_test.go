@@ -17,16 +17,17 @@ func TestTokenChecker_Get(t *testing.T) {
 }
 
 func TestTokenChecker_GetAfterTimeout(t *testing.T) {
-	ttc := NewTokenChecker(1, 2, time.Millisecond*2)
+	ttc := NewTokenChecker(1, 2, 2*time.Millisecond)
 
 	token1 := ttc.Get()
 	assert.NotEmpty(t, token1, "Expected a non-empty token")
 	token2 := ttc.Get()
 	assert.Equal(t, token1, token2, "Expected the same token")
-	time.Sleep(time.Millisecond * 3)
+	time.Sleep(3 * time.Millisecond)
 	token3 := ttc.Get()
 	assert.NotEqual(t, token1, token3, "Expected a different token")
 }
+
 func TestTokenChecker_GetTooManyTokens(t *testing.T) {
 	ttc := NewTokenChecker(3, 1, time.Second)
 
@@ -79,8 +80,8 @@ func TestTokenChecker_CheckTooManyReuses(t *testing.T) {
 }
 
 func TestTokenChecker_CheckAfterTimeout(t *testing.T) {
-	ttc := NewTokenChecker(1, 2, time.Millisecond*2)
+	ttc := NewTokenChecker(1, 2, 2*time.Millisecond)
 	token1 := ttc.Get()
-	time.Sleep(time.Millisecond * 3)
+	time.Sleep(3 * time.Millisecond)
 	assert.False(t, ttc.Check(token1), "Expected the token to expire after the timeout")
 }
