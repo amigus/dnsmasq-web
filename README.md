@@ -269,6 +269,8 @@ header = "X-Token: $token"
 curl -H "$header" -s http://dhcp/leases
 ```
 
+Tokens are kept in memory only. When the server restarts, all previously issued tokens are discarded; fetch a new token from the socket as shown above.
+
 These steps can be combined with SSH to allow remote access with tokens:
 
 ```bash
