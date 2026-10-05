@@ -99,7 +99,7 @@ func RunDaemon(listenAddress, user, group string, preserveEnv bool, extraFiles [
 			cmd.Args = append(cmd.Args, os.Args[i])
 		}
 	}
-	
+
 	// Inherent variables from the parent process if -E is set
 	if preserveEnv {
 		cmd.Env = os.Environ()

@@ -20,6 +20,7 @@ The DHCP reservation data is stored in files under the host directory.
 
 - `bash scripts/build.sh debug` builds the host-architecture debug binary at `dist/debug/dnsmasq-web`.
 - `mage` is a thin wrapper around the same debug build.
+- Debug builds compile `github.com/mattn/go-sqlite3` with CGO, so they need a working host C compiler (`gcc` by default, or whatever `CC` points to); `scripts/build.sh debug` fails fast with a hint when the compiler is missing.
 - `bash scripts/build.sh release` builds the supported Linux release artifacts at `dist/release/`.
 - Local release builds use Docker by default so local output matches CI artifact targets and naming.
 - On a developer machine, the first release build prepares a reusable Docker image and persistent Go cache volumes; later release builds reuse them instead of reinstalling packages and redownloading modules from scratch.

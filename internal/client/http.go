@@ -10,10 +10,10 @@ import (
 
 // Client wraps resty and handles token injection, retry-on-401, and error handling.
 type Client struct {
-	config         *Config
-	tokenProvider  *TokenProvider
-	restyClient    *resty.Client
-	currentToken   string
+	config        *Config
+	tokenProvider *TokenProvider
+	restyClient   *resty.Client
+	currentToken  string
 }
 
 // NewClient creates a new HTTP client with the given configuration.
@@ -203,8 +203,8 @@ func (c *Client) GetReservation(mac string) (*Reservation, error) {
 // CreateReservation creates a new reservation.
 func (c *Client) CreateReservation(mac, ipv4, hostname string, tags []string, leaseTime string) (*Reservation, error) {
 	req := map[string]interface{}{
-		"mac":   mac,
-		"ipv4":  ipv4,
+		"mac":  mac,
+		"ipv4": ipv4,
 	}
 	if hostname != "" {
 		req["hostname"] = hostname

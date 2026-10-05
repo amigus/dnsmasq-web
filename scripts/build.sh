@@ -28,6 +28,7 @@ usage() {
 Usage: scripts/build.sh <debug|release|prepare-release-image|release-inner|clean>
 
 debug         Build an unstripped host-architecture binary for local debugging.
+              Requires a host C compiler for CGO (gcc, or $CC when set).
 release       Build the supported Linux release binaries, using Docker by default.
 prepare-release-image
               Build the reusable local Docker image used for release builds.
@@ -156,6 +157,17 @@ prepare_release_image() {
 }
 
 build_debug() {
+	local compiler="${CC:-gcc}"
+	if ! command -v "${compiler}" >/dev/null 2>&1; then
+		cat >&2 <<EOF
+debug builds require a host C compiler: CGO is enabled because dnsmasq-web
+depends on github.com/mattn/go-sqlite3, and the Go toolchain will invoke
+"${compiler}", which is not available in PATH.
+Install a C compiler (for example: apt install build-essential) or set CC to an
+available one. Release builds are unaffected: they compile in Docker by default.
+EOF
+		return 1
+	fi
 	mkdir -p "${DEBUG_DIR}"
 	(
 		cd "${ROOT_DIR}"
