@@ -135,6 +135,7 @@ dnsmasq-web completion zsh | sudo tee /usr/share/zsh/site-functions/_dnsmasq-web
 ## Notes
 
 - **Token Acquisition**: Tokens are fetched from a Unix domain socket on the server. For remote servers accessed via SSH, the socket path must be the same on both local and remote systems.
+- **Token Lifetime**: Tokens are held in memory on the server and are discarded when it restarts. Re-run the command without the --token flag to fetch a fresh one.
 - **SSH Configuration**: For seamless remote access, configure SSH to connect without prompts.
 - **Timeouts**: Local token retrieval times out after 2 seconds; SSH token retrieval after 5 seconds.
 - **Error Messages**: The CLI provides clear error messages for invalid arguments, authentication failures, and server errors.
