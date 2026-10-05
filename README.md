@@ -275,3 +275,12 @@ These steps can be combined with SSH to allow remote access with tokens:
 ```bash
 curl -H "X-Token: $(ssh -ntq dhcp curl -s --unix-socket /run/dnsmasq-web.sock .)" -s http://dhcp/leases
 ```
+
+### PID File
+
+When running as a daemon with `-d`, the daemon writes its process ID to the PID file,
+`/run/dnsmasq-web.pid` by default, overridable with `-P`.
+On a clean shutdown (`SIGINT` or `SIGTERM`) the PID file is removed.
+If the daemon is killed without a chance to clean up (e.g. `SIGKILL`),
+a stale PID file is left behind and is silently overwritten on the next start;
+the daemon does not check for a running process before rewriting it.

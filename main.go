@@ -86,6 +86,7 @@ Daemonize Options:
 Listening on ports below 1024, e.g., -l ":867" requires root privileges.
 Using the -u and -g flags to drop root privilege after opening the port is recommended.
 The tokens are kept in memory and are not persisted across restarts.
+The PID file is rewritten on every daemon start; a stale PID file left by an unclean shutdown is silently overwritten.
 Setting -E copies all environment variables to the child process.
 Setting -T 0 disables token checking entirely.
 `,
