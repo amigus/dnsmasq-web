@@ -15,6 +15,7 @@ import (
 	cmdpkg "github.com/amigus/dnsmasq-web/cmd"
 	"github.com/gin-gonic/gin"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/seancfoley/ipaddress-go/ipaddr"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -43,7 +44,7 @@ func main() {
 func runServerMain() {
 	name := filepath.Base(os.Args[0])
 
-	var databaseFilePath, hostDirPath, listenOn, pidFilePath, unixSocketPath, userFlag, groupFlag string
+	var databaseFilePath, hostDirPath, listenOn, pidFilePath, unixSocketPath, userFlag, groupFlag, subnetCIDR string
 	var daemonize, preserveEnv, verbose bool
 	var maxTokens, maxTokenUses int
 	var tokenTimeout time.Duration
@@ -51,6 +52,7 @@ func runServerMain() {
 	flag.BoolVar(&daemonize, "d", false, "fork and run as a daemon")
 	flag.BoolVar(&preserveEnv, "E", false, "preserve environment when daemonizing")
 	flag.StringVar(&databaseFilePath, "f", "", "the SQLite database file")
+	flag.StringVar(&subnetCIDR, "s", "", "the subnet that /requests queries must fall within, e.g., '192.168.1.0/24'")
 	flag.StringVar(&hostDirPath, "h", "", "the dhcp-host files directory")
 	flag.StringVar(&listenOn, "l", "", "the IP address and port to listen on, e.g., ':867'")
 	flag.StringVar(&groupFlag, "g", "", "group to run the process as (requires root)")
@@ -69,7 +71,7 @@ Dnsmasq Web is a database-backed JSON/HTTP API for Dnsmasq.
 
 Usage: %s [options] [-d [daemonize options]]
 Options:
-    -f database-file -h host-dir -l address [-v]
+    -f database-file -h host-dir -l address [-s subnet] [-v]
 Daemonize Options:
     [-E]
     [-u user] [-g group]
@@ -104,6 +106,13 @@ Setting -T 0 disables token checking entirely.
 	if databaseFilePath == "" && hostDirPath == "" {
 		fmt.Fprintf(os.Stderr, "one or both of -f database-file and -h host-dir are required\n")
 		os.Exit(1)
+	}
+
+	if subnetCIDR != "" {
+		if _, err := ipaddr.NewIPAddressString(subnetCIDR).ToAddress(); err != nil {
+			fmt.Fprintf(os.Stderr, "invalid subnet '%s': %v\n", subnetCIDR, err)
+			os.Exit(1)
+		}
 	}
 
 	if databaseFilePath != "" {
@@ -232,7 +241,7 @@ Setting -T 0 disables token checking entirely.
 					databaseFilePath, err)
 				os.Exit(1)
 			}
-			r = LeaseDatabase(r, gormDb)
+			r = LeaseDatabase(r, gormDb, subnetCIDR)
 		}
 		if hostDirPath != "" {
 			r = DhcpHostDir(r, hostDirPath)
