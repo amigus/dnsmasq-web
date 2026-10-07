@@ -107,7 +107,7 @@ func whereSince(c *gin.Context, db *gorm.DB, oldest time.Time, name, field strin
 	return nil, false
 }
 
-func LeaseDatabase(r *gin.Engine, db *gorm.DB) *gin.Engine {
+func LeaseDatabase(r *gin.Engine, db *gorm.DB, subnet string) *gin.Engine {
 	db.AutoMigrate(&Request{}, &Lease{}, &Client{})
 
 	r.GET("/leases", func(c *gin.Context) {
@@ -285,6 +285,37 @@ func LeaseDatabase(r *gin.Engine, db *gorm.DB) *gin.Engine {
 		if cidr == "" && ipRange == "" {
 			c.JSON(http.StatusBadRequest, gin.H{
 				"error": "Either 'cidr' or 'range' is required",
+			})
+			return
+		}
+
+		if subnet == "" {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "No subnet configured; start the server with -s to query /requests",
+			})
+			return
+		}
+
+		subnetAddr, subnetErr := ipaddr.NewIPAddressString(subnet).ToAddress()
+		if subnetErr != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": fmt.Sprintf("invalid configured subnet '%s': %v", subnet, subnetErr),
+			})
+			return
+		}
+
+		expression := cidr
+		if expression == "" {
+			expression = ipRange
+		}
+		requestedAddr, requestErr := ipaddr.NewIPAddressString(expression).ToAddress()
+		if requestErr != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": requestErr.Error()})
+			return
+		}
+		if !subnetAddr.Contains(requestedAddr) {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": fmt.Sprintf("requested addresses must fall within the configured subnet %s", subnet),
 			})
 			return
 		}

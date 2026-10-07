@@ -15,6 +15,7 @@ The DHCP reservation data is stored in files under the host directory.
 1. Add the [database](https://gist.github.com/amigus/6a9e4151d175d04bf05337b815f2213e) to the DHCP server.
 1. Download the appropriate binary from the [releases](https://github.com/amigus/dnsmasq-web/releases/latest) page to the DHCP server.
 1. Run the API server with `dnsmasq-web server`, for example `sudo dnsmasq-web server -d -l :80 -T 0`.
+1. Optionally pass `-s subnet` (e.g. `-s 192.168.1.0/24`) to configure the subnet that `/requests` queries must fall within.
 
 ## Local Builds
 
@@ -61,6 +62,7 @@ The legacy shell helpers in `cli/` are retained only as reference material and a
 - `/requests`
   GET with `cidr`: retrieve requests filtered by CIDR.
   GET with `range`: retrieve requests filtered by range.
+  The `cidr` or `range` must fall within the subnet configured at startup with `-s subnet`; queries outside the subnet, or made when no subnet is configured, return a 400 error.
 
 ## Examples
 

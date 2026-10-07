@@ -18,7 +18,7 @@ func setupRouter() *gin.Engine {
 
 	db.Exec(testDatabaseSQL)
 
-	return LeaseDatabase(r, db)
+	return LeaseDatabase(r, db, "192.168.1.0/24")
 }
 
 func TestLeasesEndpoint(t *testing.T) {
@@ -161,4 +161,37 @@ func TestRequestsEndpointRange(t *testing.T) {
 	assert.NotEmpty(t, response)
 	assert.Contains(t, response, "192.168.1.9")
 	assert.Equal(t, "Adam-s-Phone", response["192.168.1.9"][0].Hostname)
+}
+
+func TestRequestsEndpointCIDROutsideSubnet(t *testing.T) {
+	router := setupRouter()
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/requests?cidr=192.168.2.0/28", nil)
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestRequestsEndpointRangeOutsideSubnet(t *testing.T) {
+	router := setupRouter()
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/requests?range=192.168.2.1-15", nil)
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestRequestsEndpointNoSubnet(t *testing.T) {
+	r := gin.Default()
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db.Exec(testDatabaseSQL)
+	router := LeaseDatabase(r, db, "")
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/requests?cidr=192.168.1.0/28", nil)
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
