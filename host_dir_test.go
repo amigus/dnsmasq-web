@@ -310,3 +310,44 @@ func TestGetReservationWithInvalidMAC(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
+
+func TestReadReservationFileRejectsTraversalShapedMAC(t *testing.T) {
+	hostDir := "./test_hosts"
+	os.Mkdir(hostDir, 0755)
+	defer os.RemoveAll(hostDir)
+
+	// A valid reservation inside hostDir keeps the happy path observable.
+	validPath := filepath.Join(hostDir, "00:1a:2b:3c:4d:5e")
+	assert.NoError(t, os.WriteFile(validPath, []byte("00:1a:2b:3c:4d:5e,192.168.1.100"), 0640))
+
+	// A sentinel outside hostDir that a traversal would otherwise reach.
+	sentinel := "./test_traversal_target"
+	assert.NoError(t, os.WriteFile(sentinel, []byte("00:1a:2b:3c:4d:5e,10.0.0.1"), 0640))
+	defer os.Remove(sentinel)
+
+	cases := []struct {
+		name  string
+		input string
+	}{
+		{"parent dir", ".."},
+		{"parent traversal", "../.."},
+		{"embedded traversal", "a/../b"},
+		{"escape to sentinel", "../test_traversal_target"},
+		{"backslash traversal", `..\..\etc`},
+		{"encoded traversal", "..%2f..%2f"},
+		{"traversal after valid mac", "00:1a:2b:3c:4d:5e/../../test_traversal_target"},
+		{"nul byte", "00:1a:2b:3c:4d:5e\x00"},
+		{"absolute path", "/etc/passwd"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := readReservationFile(tc.input, hostDir)
+			assert.Error(t, err)
+		})
+	}
+
+	// Positive control: a normalized MAC still reads successfully.
+	res, err := readReservationFile("00:1a:2b:3c:4d:5e", hostDir)
+	assert.NoError(t, err)
+	assert.Equal(t, "192.168.1.100", res.IPv4)
+}
