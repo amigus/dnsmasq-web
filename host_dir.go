@@ -97,6 +97,10 @@ func deleteReservationFile(c *gin.Context, hostDir string) {
 }
 
 func readReservationFile(mac string, hostDir string) (reservation, error) {
+	if _, err := validateMAC(mac); err != nil {
+		return reservation{}, err
+	}
+
 	filePath := filepath.Join(hostDir, mac)
 	file, err := os.Open(filePath)
 	if err != nil {
