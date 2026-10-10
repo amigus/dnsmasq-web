@@ -9,6 +9,7 @@ import (
 	"github.com/amigus/dnsmasq-web/internal/reservations"
 	"github.com/gin-gonic/gin"
 	"github.com/seancfoley/ipaddress-go/ipaddr"
+	"gorm.io/gorm"
 )
 
 type reservationData struct {
@@ -39,7 +40,7 @@ func validateIPv4(ipv4 string) (*ipaddr.IPAddress, error) {
 	return addr, nil
 }
 
-func createReservationFile(input reservation, c *gin.Context, hostDir string, overwrite bool) {
+func createReservationFile(input reservation, c *gin.Context, db *gorm.DB, hostDir string, overwrite bool) {
 	mac, err := validateMAC(input.MAC)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid MAC address"})
@@ -49,6 +50,23 @@ func createReservationFile(input reservation, c *gin.Context, hostDir string, ov
 	ipv4, err := validateIPv4(input.IPv4)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid IPv4 address"})
+		return
+	}
+
+	if existing, err := findReservationByIPv4(ipv4.String(), hostDir); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	} else if existing != nil && existing.MAC != mac.ToColonDelimitedString() {
+		c.JSON(http.StatusConflict, gin.H{"error": "ipv4 " + ipv4.String() + " is already reserved for " + existing.MAC})
+		return
+	}
+
+	var leased Lease
+	if err := db.Where("ipv4 = ?", ipv4.String()).First(&leased).Error; err != nil && err != gorm.ErrRecordNotFound {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	} else if err == nil && leased.Mac != mac.ToColonDelimitedString() && c.Query("force") != "1" {
+		c.JSON(http.StatusConflict, gin.H{"error": "ipv4 " + ipv4.String() + " is currently leased to " + leased.Mac + "; retry with force=1 to override"})
 		return
 	}
 
@@ -73,8 +91,8 @@ func createReservationFile(input reservation, c *gin.Context, hostDir string, ov
 	c.JSON(http.StatusCreated, gin.H{"message": "success"})
 }
 
-func updateReservationFile(input reservationData, mac string, c *gin.Context, hostDir string) {
-	createReservationFile(reservation{MAC: mac, reservationData: input}, c, hostDir, true)
+func updateReservationFile(input reservationData, mac string, c *gin.Context, db *gorm.DB, hostDir string) {
+	createReservationFile(reservation{MAC: mac, reservationData: input}, c, db, hostDir, true)
 }
 
 func deleteReservationFile(c *gin.Context, hostDir string) {
@@ -94,6 +112,31 @@ func deleteReservationFile(c *gin.Context, hostDir string) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "success"})
+}
+
+func findReservationByIPv4(ipv4, hostDir string) (*reservation, error) {
+	var found *reservation
+	err := filepath.Walk(hostDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		mac, err := validateMAC(info.Name())
+		if err != nil {
+			return nil
+		}
+		res, err := readReservationFile(mac.ToNormalizedString(), hostDir)
+		if err != nil {
+			return err
+		}
+		if res.IPv4 == ipv4 {
+			found = &res
+		}
+		return nil
+	})
+	return found, err
 }
 
 func readReservationFile(mac string, hostDir string) (reservation, error) {
@@ -177,7 +220,7 @@ func getReservationFile(c *gin.Context, hostDir string) {
 	}
 }
 
-func DhcpHostDir(r *gin.Engine, hostDir string) *gin.Engine {
+func DhcpHostDir(r *gin.Engine, db *gorm.DB, hostDir string) *gin.Engine {
 	r.POST("/reservations", func(c *gin.Context) {
 		var input struct {
 			MAC string `json:"mac" binding:"required"`
@@ -189,7 +232,7 @@ func DhcpHostDir(r *gin.Engine, hostDir string) *gin.Engine {
 			return
 		}
 
-		createReservationFile(input, c, hostDir, false)
+		createReservationFile(input, c, db, hostDir, false)
 	})
 
 	r.PUT("/reservations/:mac", func(c *gin.Context) {
@@ -199,7 +242,7 @@ func DhcpHostDir(r *gin.Engine, hostDir string) *gin.Engine {
 			return
 		}
 
-		updateReservationFile(input, c.Param("mac"), c, hostDir)
+		updateReservationFile(input, c.Param("mac"), c, db, hostDir)
 	})
 
 	r.DELETE("/reservations/:mac", func(c *gin.Context) {
