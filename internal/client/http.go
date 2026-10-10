@@ -225,6 +225,32 @@ func (c *Client) CreateReservation(mac, ipv4, hostname string, tags []string, le
 	return c.GetReservation(mac)
 }
 
+// PinReservation creates a reservation from the current DHCP lease.
+func (c *Client) PinReservation(mac, hostname string, tags []string, leaseTime string, force bool) (*Reservation, error) {
+	req := map[string]any{
+		"mac":        mac,
+		"from_lease": true,
+	}
+	if hostname != "" {
+		req["hostname"] = hostname
+	}
+	if len(tags) > 0 {
+		req["tags"] = tags
+	}
+	if leaseTime != "" {
+		req["lease_time"] = leaseTime
+	}
+
+	endpoint := "/reservations"
+	if force {
+		endpoint += "?force=1"
+	}
+	if err := c.do("POST", endpoint, req, nil); err != nil {
+		return nil, err
+	}
+	return c.GetReservation(mac)
+}
+
 // UpdateReservation updates an existing reservation by MAC.
 func (c *Client) UpdateReservation(mac string, update map[string]any) (*Reservation, error) {
 	endpoint := fmt.Sprintf("/reservations/%s", mac)

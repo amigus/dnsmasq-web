@@ -120,6 +120,57 @@ func TestCreateReservationWithInvalidMAC(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
+func TestCreateReservationFromLease(t *testing.T) {
+	r, db := setupRouterForReservationsTests()
+	defer os.RemoveAll("./test_hosts")
+	db.Create(&Lease{Mac: "00:1a:2b:3c:4d:5e", IPv4: "192.168.1.100"})
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/reservations", strings.NewReader(`{"mac":"00:1A:2B:3C:4D:5E","from_lease":true,"tags":["trusted"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusCreated, w.Code)
+	assert.Contains(t, w.Body.String(), `"from_lease":true`)
+	content, err := os.ReadFile(filepath.Join("./test_hosts", "00:1a:2b:3c:4d:5e"))
+	assert.NoError(t, err)
+	assert.Equal(t, "00:1a:2b:3c:4d:5e,set:trusted,192.168.1.100", string(content))
+}
+
+func TestCreateReservationFromLeaseValidation(t *testing.T) {
+	r, _ := setupRouterForReservationsTests()
+	defer os.RemoveAll("./test_hosts")
+
+	for _, body := range []string{
+		`{"mac":"00:1A:2B:3C:4D:5E"}`,
+		`{"mac":"00:1A:2B:3C:4D:5E","ipv4":"192.168.1.100","from_lease":true}`,
+		`{"mac":"00:1A:2B:3C:4D:5E","from_lease":true}`,
+	} {
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest("POST", "/reservations", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		r.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestUpdateReservationFromLease(t *testing.T) {
+	r, db := setupRouterForReservationsTests()
+	defer os.RemoveAll("./test_hosts")
+	db.Create(&Lease{Mac: "00:1a:2b:3c:4d:5e", IPv4: "192.168.1.101"})
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("PUT", "/reservations/00:1A:2B:3C:4D:5E", strings.NewReader(`{"from_lease":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusCreated, w.Code)
+	assert.Contains(t, w.Body.String(), `"from_lease":true`)
+	content, err := os.ReadFile(filepath.Join("./test_hosts", "00:1a:2b:3c:4d:5e"))
+	assert.NoError(t, err)
+	assert.Contains(t, string(content), "192.168.1.101")
+}
+
 func TestUpdateReservation(t *testing.T) {
 	r, _ := setupRouterForReservationsTests()
 	defer os.RemoveAll("./test_hosts")

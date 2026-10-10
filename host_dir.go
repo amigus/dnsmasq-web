@@ -14,7 +14,8 @@ import (
 
 type reservationData struct {
 	Tags      []string `json:"tags"`
-	IPv4      string   `json:"ipv4" binding:"required"`
+	IPv4      string   `json:"ipv4"`
+	FromLease bool     `json:"from_lease,omitempty"`
 	Hostname  string   `json:"hostname,omitempty"`
 	LeaseTime string   `json:"lease_time,omitempty"`
 }
@@ -45,6 +46,24 @@ func createReservationFile(input reservation, c *gin.Context, db *gorm.DB, hostD
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid MAC address"})
 		return
+	}
+
+	if (input.IPv4 == "") == !input.FromLease {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "exactly one of ipv4 or from_lease is required"})
+		return
+	}
+
+	if input.FromLease {
+		var lease Lease
+		if err := db.Where("mac = ?", mac.ToColonDelimitedString()).First(&lease).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "no current lease; an explicit IPv4 is required"})
+			} else {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			}
+			return
+		}
+		input.IPv4 = lease.IPv4
 	}
 
 	ipv4, err := validateIPv4(input.IPv4)
@@ -88,7 +107,7 @@ func createReservationFile(input reservation, c *gin.Context, db *gorm.DB, hostD
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"message": "success"})
+	c.JSON(http.StatusCreated, gin.H{"message": "success", "from_lease": input.FromLease})
 }
 
 func updateReservationFile(input reservationData, mac string, c *gin.Context, db *gorm.DB, hostDir string) {
