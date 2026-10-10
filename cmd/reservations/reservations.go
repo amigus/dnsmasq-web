@@ -12,6 +12,7 @@ func init() {
 	ReservationsCmd.AddCommand(listCmd)
 	ReservationsCmd.AddCommand(getCmd)
 	ReservationsCmd.AddCommand(addCmd)
+	ReservationsCmd.AddCommand(pinCmd)
 	ReservationsCmd.AddCommand(updateCmd)
 	ReservationsCmd.AddCommand(deleteCmd)
 }
