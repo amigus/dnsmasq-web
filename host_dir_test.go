@@ -10,19 +10,26 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
-func setupRouterForReservationsTests() *gin.Engine {
+func setupRouterForReservationsTests() (*gin.Engine, *gorm.DB) {
 	gin.SetMode(gin.TestMode)
 	r := gin.Default()
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		panic(err)
+	}
+	db.AutoMigrate(&Lease{})
 	hostDir := "./test_hosts"
 	os.Mkdir(hostDir, 0755)
-	DhcpHostDir(r, hostDir)
-	return r
+	DhcpHostDir(r, db, hostDir)
+	return r, db
 }
 
 func TestCreateReservation(t *testing.T) {
-	r := setupRouterForReservationsTests()
+	r, _ := setupRouterForReservationsTests()
 	defer os.RemoveAll("./test_hosts")
 
 	w := httptest.NewRecorder()
@@ -41,7 +48,7 @@ func TestCreateReservation(t *testing.T) {
 }
 
 func TestCreateMinimalReservation(t *testing.T) {
-	r := setupRouterForReservationsTests()
+	r, _ := setupRouterForReservationsTests()
 	defer os.RemoveAll("./test_hosts")
 
 	w := httptest.NewRecorder()
@@ -61,7 +68,7 @@ func TestCreateMinimalReservation(t *testing.T) {
 }
 
 func TestCreateReservationWithInvalidIPv4(t *testing.T) {
-	r := setupRouterForReservationsTests()
+	r, _ := setupRouterForReservationsTests()
 	defer os.RemoveAll("./test_hosts")
 
 	w := httptest.NewRecorder()
@@ -79,7 +86,7 @@ func TestCreateReservationWithInvalidIPv4(t *testing.T) {
 }
 
 func TestCreateReservationWithMissingMAC(t *testing.T) {
-	r := setupRouterForReservationsTests()
+	r, _ := setupRouterForReservationsTests()
 	defer os.RemoveAll("./test_hosts")
 
 	w := httptest.NewRecorder()
@@ -96,7 +103,7 @@ func TestCreateReservationWithMissingMAC(t *testing.T) {
 }
 
 func TestCreateReservationWithInvalidMAC(t *testing.T) {
-	r := setupRouterForReservationsTests()
+	r, _ := setupRouterForReservationsTests()
 	defer os.RemoveAll("./test_hosts")
 
 	w := httptest.NewRecorder()
@@ -114,7 +121,7 @@ func TestCreateReservationWithInvalidMAC(t *testing.T) {
 }
 
 func TestUpdateReservation(t *testing.T) {
-	r := setupRouterForReservationsTests()
+	r, _ := setupRouterForReservationsTests()
 	defer os.RemoveAll("./test_hosts")
 
 	// First create a reservation
@@ -150,7 +157,7 @@ func TestUpdateReservation(t *testing.T) {
 }
 
 func TestUpdateReservationNoTags(t *testing.T) {
-	r := setupRouterForReservationsTests()
+	r, _ := setupRouterForReservationsTests()
 	defer os.RemoveAll("./test_hosts")
 
 	// First create a reservation
@@ -169,7 +176,7 @@ func TestUpdateReservationNoTags(t *testing.T) {
 }
 
 func TestDeleteReservation(t *testing.T) {
-	r := setupRouterForReservationsTests()
+	r, _ := setupRouterForReservationsTests()
 	defer os.RemoveAll("./test_hosts")
 
 	// First create a reservation
@@ -196,7 +203,7 @@ func TestDeleteReservation(t *testing.T) {
 }
 
 func TestDeleteNonexistentReservation(t *testing.T) {
-	r := setupRouterForReservationsTests()
+	r, _ := setupRouterForReservationsTests()
 	defer os.RemoveAll("./test_hosts")
 
 	w := httptest.NewRecorder()
@@ -206,7 +213,7 @@ func TestDeleteNonexistentReservation(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 func TestGetAllReservations(t *testing.T) {
-	r := setupRouterForReservationsTests()
+	r, _ := setupRouterForReservationsTests()
 	defer os.RemoveAll("./test_hosts")
 
 	// Create a few reservations
@@ -234,7 +241,7 @@ func TestGetAllReservations(t *testing.T) {
 }
 
 func TestGetReservation(t *testing.T) {
-	r := setupRouterForReservationsTests()
+	r, _ := setupRouterForReservationsTests()
 	defer os.RemoveAll("./test_hosts")
 
 	// Create a reservation
@@ -263,7 +270,7 @@ func TestGetReservation(t *testing.T) {
 }
 
 func TestGetReservationWithMultipleTags(t *testing.T) {
-	r := setupRouterForReservationsTests()
+	r, _ := setupRouterForReservationsTests()
 	defer os.RemoveAll("./test_hosts")
 
 	w := httptest.NewRecorder()
@@ -290,7 +297,7 @@ func TestGetReservationWithMultipleTags(t *testing.T) {
 }
 
 func TestGetNonexistentReservation(t *testing.T) {
-	r := setupRouterForReservationsTests()
+	r, _ := setupRouterForReservationsTests()
 	defer os.RemoveAll("./test_hosts")
 
 	w := httptest.NewRecorder()
@@ -301,7 +308,7 @@ func TestGetNonexistentReservation(t *testing.T) {
 }
 
 func TestGetReservationWithInvalidMAC(t *testing.T) {
-	r := setupRouterForReservationsTests()
+	r, _ := setupRouterForReservationsTests()
 	defer os.RemoveAll("./test_hosts")
 
 	w := httptest.NewRecorder()

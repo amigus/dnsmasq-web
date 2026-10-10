@@ -235,8 +235,10 @@ Setting -T 0 disables token checking entirely.
 			os.Exit(0)
 		}()
 		r := gin.Default()
+		var gormDb *gorm.DB
 		if databaseFilePath != "" {
-			gormDb, err := gorm.Open(sqlite.Open(databaseFilePath), &gorm.Config{})
+			var err error
+			gormDb, err = gorm.Open(sqlite.Open(databaseFilePath), &gorm.Config{})
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "unable to open database '%s': %v\n",
 					databaseFilePath, err)
@@ -245,7 +247,11 @@ Setting -T 0 disables token checking entirely.
 			r = LeaseDatabase(r, gormDb, subnetCIDR)
 		}
 		if hostDirPath != "" {
-			r = DhcpHostDir(r, hostDirPath)
+			if gormDb == nil {
+				fmt.Fprintln(os.Stderr, "a lease database is required when a DHCP host directory is configured")
+				os.Exit(1)
+			}
+			r = DhcpHostDir(r, gormDb, hostDirPath)
 		}
 		// Run the server
 		if os.Getenv(listenerEnvVarName) != "" {
