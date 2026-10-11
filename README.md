@@ -64,6 +64,18 @@ The legacy shell helpers in `cli/` are retained only as reference material and a
   GET with `range`: retrieve requests filtered by range.
   The `cidr` or `range` must fall within the subnet configured at startup with `-s subnet`; queries outside the subnet, or made when no subnet is configured, return a 400 error.
 
+### Versioned API
+
+`/api/v1` is the canonical API for new integrations. The unversioned endpoints above remain supported compatibility endpoints and retain their existing JSON shapes. There is intentionally no `/inventory` endpoint: a DHCP identity is represented by a canonical device, identified by its normalized lower-case colon-delimited MAC address.
+
+- `GET /api/v1/devices` lists observed devices and retained annotations.
+- `GET /api/v1/devices/:mac` returns one device with DHCP-observed facts, active leases, and optional operator annotation.
+- `GET /api/v1/devices/:mac/addresses` returns that device's historical IPv4 assignments.
+- `PATCH` and `DELETE /api/v1/devices/:mac/annotation` manage application-owned metadata without changing DHCP observations or reservations.
+- `GET /api/v1/alerts`, `GET /api/v1/alerts/:id`, and `PATCH /api/v1/alerts/:id` expose persistent alert acknowledgement state.
+
+The `observed` domain in a device response is derived from DHCP and read-only. `annotation` is optional application-owned metadata; omitted fields preserve existing annotation values, supplied empty scalar values clear them, and supplied tags replace the tag list. Annotation fields are trimmed; names and owners are limited to 256 bytes, notes to 4096 bytes, and tags to 32 unique non-empty values of at most 64 bytes.
+
 ## Examples
 
 ### Reservations
