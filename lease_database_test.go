@@ -13,12 +13,17 @@ import (
 )
 
 func setupRouter() *gin.Engine {
+	r, _ := setupRouterWithDB()
+	return r
+}
+
+func setupRouterWithDB() (*gin.Engine, *gorm.DB) {
 	r := gin.Default()
 	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 
 	db.Exec(testDatabaseSQL)
 
-	return LeaseDatabase(r, db, "192.168.1.0/24")
+	return LeaseDatabase(r, db, "192.168.1.0/24"), db
 }
 
 func TestLeasesEndpoint(t *testing.T) {
