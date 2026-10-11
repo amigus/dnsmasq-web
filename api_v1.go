@@ -189,7 +189,7 @@ func normalizedMAC(c *gin.Context) (string, bool) {
 
 // ApiV1 registers the versioned canonical device and alert API. The existing
 // unversioned routes remain compatibility endpoints.
-func ApiV1(r *gin.Engine, db *gorm.DB, subnet string) {
+func ApiV1(r *gin.Engine, db *gorm.DB) {
 	db.AutoMigrate(&DeviceAnnotation{}, &Alert{})
 	api := r.Group("/api/v1")
 
