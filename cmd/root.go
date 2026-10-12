@@ -21,8 +21,8 @@ var rootCmd = &cobra.Command{
 	Long: `dnsmasq-web is a unified server and CLI for the dnsmasq-web API.
 
 Use 'dnsmasq-web server ...' to run the API server.
-Use the remaining subcommands to query DHCP leases, clients, devices, and
-manage DHCP reservations.`,
+Use the remaining subcommands to query DHCP leases, clients, and devices,
+manage DHCP reservations, and watch new-device alerts.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		if cmd.Name() == "server" {
 			return nil
@@ -99,6 +99,7 @@ func init() {
 	rootCmd.AddCommand(devicesCmd)
 	rootCmd.AddCommand(requestsCmd)
 	rootCmd.AddCommand(dhcpCmd)
+	rootCmd.AddCommand(alertsCmd)
 	rootCmd.AddCommand(reservations.ReservationsCmd)
 	rootCmd.AddCommand(serverCmd)
 }

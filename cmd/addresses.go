@@ -12,7 +12,7 @@ var addressesCmd = &cobra.Command{
 	Use:        "addresses <mac>",
 	Short:      "Show address history for a MAC address",
 	Deprecated: "use /api/v1/devices/:mac/addresses for MAC history; CLI migration pending",
-	Args:      cobra.ExactArgs(1),
+	Args:       cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cl := cmd.Context().Value("client").(*client.Client)
 		cfg := cmd.Context().Value("config").(*client.Config)

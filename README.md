@@ -36,6 +36,9 @@ Run the server with `dnsmasq-web server ...`; all other subcommands are client o
 ```bash
 dnsmasq-web leases
 dnsmasq-web clients --since 2024-09-01
+dnsmasq-web devices list
+dnsmasq-web devices annotation set bc:32:b2:3b:13:d4 --name "Living-room TV"
+dnsmasq-web alerts list --unacknowledged
 dnsmasq-web reservations list --output json
 dnsmasq-web addresses bc:32:b2:3b:13:d4 --output json | jq
 ```
