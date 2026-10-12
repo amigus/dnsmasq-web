@@ -28,7 +28,7 @@ type DeviceAnnotation struct {
 // Alert is a persistent event detected for a device.
 type Alert struct {
 	ID           uint       `gorm:"primaryKey" json:"id"`
-	MAC          string     `json:"mac"`
+	MAC          string     `gorm:"uniqueIndex" json:"mac"`
 	Hostname     string     `json:"hostname"`
 	IPv4         string     `json:"ipv4"`
 	DetectedAt   time.Time  `json:"detected_at"`
@@ -192,7 +192,7 @@ func normalizedMAC(c *gin.Context) (string, bool) {
 // ApiV1 registers the versioned canonical API. The existing unversioned routes
 // remain compatibility endpoints.
 func ApiV1(r *gin.Engine, db *gorm.DB, subnet string) {
-	db.AutoMigrate(&DeviceAnnotation{}, &Alert{})
+	db.AutoMigrate(&DeviceAnnotation{}, &Alert{}, &DeviceAlertState{})
 	api := r.Group("/api/v1")
 
 	api.GET("/devices", func(c *gin.Context) {
