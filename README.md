@@ -45,6 +45,7 @@ dnsmasq-web addresses bc:32:b2:3b:13:d4 --output json | jq
 ```
 
 See `CLI.md` for the full client command reference.
+See `GETTING-STARTED.md` for a step-by-step migration and usage guide.
 
 The legacy shell helpers in `cli/` are retained only as reference material and are no longer built or released.
 
