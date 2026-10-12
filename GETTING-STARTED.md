@@ -165,7 +165,7 @@ curl -H "Authorization: $token" http://dhcp/api/v1/pool
 - **Back up reservations:** they are plain files in the host directory — copy the directory. (Export/import is roadmap SP-10, not built.)
 - **Back up history:** copy the SQLite database file.
 - **Update the binary:** stop the daemon, replace the binary, start it again.
-- **Upgrade the database schema:** the server runs migrations at startup (AutoMigrate); no manual step.
+- **Upgrade the database schema:** the server runs migrations at startup (AutoMigrate); no manual step. Your existing gist database is compatible as-is: the gist tables (`requests`, `leases`, `clients`) are only ever extended in place, never altered destructively, and the new tables (`device_annotations`, `alerts`, `device_alert_state`) are created on first start. Back up the file first if you want a rollback point.
 - **Monitor:** `GET /api/v1/pool` (or `dnsmasq-web pool`) for utilization; `dnsmasq-web alerts watch` for new-device events. Health/metrics endpoint is roadmap SP-11, not built.
 
 ## Troubleshooting
