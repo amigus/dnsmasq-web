@@ -9,8 +9,9 @@ import (
 )
 
 var devicesCmd = &cobra.Command{
-	Use:   "devices <ipv4>",
-	Short: "Show MAC history for an IPv4 address",
+	Use:        "devices <ipv4>",
+	Short:      "Show MAC history for an IPv4 address",
+	Deprecated: "use 'addresses get <ipv4>' for canonical IPv4 history",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cl := cmd.Context().Value("client").(*client.Client)

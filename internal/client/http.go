@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/go-resty/resty/v2"
@@ -128,6 +129,39 @@ func (c *Client) GetLeases() ([]Lease, error) {
 		return nil, err
 	}
 	return leases, nil
+}
+
+// GetV1Leases fetches canonical active DHCP leases.
+func (c *Client) GetV1Leases() ([]Lease, error) {
+	var leases []Lease
+	if err := c.do("GET", "/api/v1/leases", nil, &leases); err != nil {
+		return nil, err
+	}
+	return leases, nil
+}
+
+// GetV1Address fetches canonical assignment history for an IPv4 address.
+func (c *Client) GetV1Address(ipv4 string) (*AddressHistory, error) {
+	var history AddressHistory
+	if err := c.do("GET", fmt.Sprintf("/api/v1/addresses/%s", ipv4), nil, &history); err != nil {
+		return nil, err
+	}
+	return &history, nil
+}
+
+// GetV1Requests fetches canonical DHCP request events for one selector.
+func (c *Client) GetV1Requests(mac, ipv4, cidr, ipRange, since string) ([]Request, error) {
+	values := url.Values{}
+	for key, value := range map[string]string{"mac": mac, "ipv4": ipv4, "cidr": cidr, "range": ipRange, "since": since} {
+		if value != "" {
+			values.Set(key, value)
+		}
+	}
+	var requests []Request
+	if err := c.do("GET", "/api/v1/dhcp/requests?"+values.Encode(), nil, &requests); err != nil {
+		return nil, err
+	}
+	return requests, nil
 }
 
 // GetClients fetches all DHCP clients with optional since filter.
