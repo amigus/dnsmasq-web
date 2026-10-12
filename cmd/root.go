@@ -100,6 +100,7 @@ func init() {
 	rootCmd.AddCommand(requestsCmd)
 	rootCmd.AddCommand(dhcpCmd)
 	rootCmd.AddCommand(alertsCmd)
+	rootCmd.AddCommand(poolCmd)
 	rootCmd.AddCommand(reservations.ReservationsCmd)
 	rootCmd.AddCommand(serverCmd)
 }
