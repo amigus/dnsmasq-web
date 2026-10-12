@@ -98,6 +98,7 @@ func init() {
 	rootCmd.AddCommand(addressesCmd)
 	rootCmd.AddCommand(devicesCmd)
 	rootCmd.AddCommand(requestsCmd)
+	rootCmd.AddCommand(dhcpCmd)
 	rootCmd.AddCommand(reservations.ReservationsCmd)
 	rootCmd.AddCommand(serverCmd)
 }

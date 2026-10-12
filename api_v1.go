@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/netip"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/seancfoley/ipaddress-go/ipaddr"
 	"gorm.io/gorm"
 )
 
@@ -187,9 +189,9 @@ func normalizedMAC(c *gin.Context) (string, bool) {
 	return mac.ToColonDelimitedString(), true
 }
 
-// ApiV1 registers the versioned canonical device and alert API. The existing
-// unversioned routes remain compatibility endpoints.
-func ApiV1(r *gin.Engine, db *gorm.DB) {
+// ApiV1 registers the versioned canonical API. The existing unversioned routes
+// remain compatibility endpoints.
+func ApiV1(r *gin.Engine, db *gorm.DB, subnet string) {
 	db.AutoMigrate(&DeviceAnnotation{}, &Alert{})
 	api := r.Group("/api/v1")
 
@@ -236,6 +238,131 @@ func ApiV1(r *gin.Engine, db *gorm.DB) {
 			return
 		}
 		c.JSON(http.StatusOK, result)
+	})
+
+	api.GET("/leases", func(c *gin.Context) {
+		var leases []struct {
+			MAC         string `json:"mac"`
+			Hostname    string `json:"hostname"`
+			ClientID    string `json:"client_id"`
+			VendorClass string `json:"vendor_class"`
+			IPv4        string `json:"ipv4"`
+			Added       string `json:"added"`
+			Renewed     string `json:"renewed"`
+		}
+		if err := db.Table("leases as l").Select("l.mac, c.hostname, c.client_id, c.vendor_class, l.ipv4, l.added, l.renewed").Joins("LEFT JOIN clients as c ON c.mac = l.mac").Order("l.mac, l.ipv4").Scan(&leases).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		for i := range leases {
+			if mac, err := validateMAC(leases[i].MAC); err == nil {
+				leases[i].MAC = mac.ToColonDelimitedString()
+			}
+		}
+		c.JSON(http.StatusOK, leases)
+	})
+
+	api.GET("/addresses/:ipv4", func(c *gin.Context) {
+		ipv4, err := netip.ParseAddr(c.Param("ipv4"))
+		if err != nil || !ipv4.Is4() {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid IPv4 address"})
+			return
+		}
+		response := struct {
+			IPv4        string `json:"ipv4"`
+			Assignments []struct {
+				MAC              string `json:"mac"`
+				FirstSeen        string `json:"first_seen"`
+				LastSeen         string `json:"last_seen"`
+				RequestedOptions string `json:"requested_options"`
+				Hostname         string `json:"hostname"`
+				VendorClass      string `json:"vendor_class"`
+			} `json:"assignments"`
+		}{IPv4: ipv4.String(), Assignments: []struct {
+			MAC              string `json:"mac"`
+			FirstSeen        string `json:"first_seen"`
+			LastSeen         string `json:"last_seen"`
+			RequestedOptions string `json:"requested_options"`
+			Hostname         string `json:"hostname"`
+			VendorClass      string `json:"vendor_class"`
+		}{}}
+		if err := db.Table("requests as r").Select("r.mac, MIN(r.received) as first_seen, MAX(r.received) as last_seen, MAX(r.requested_options) as requested_options, MAX(c.hostname) as hostname, MAX(c.vendor_class) as vendor_class").Joins("LEFT JOIN clients as c ON c.mac = r.mac").Where("r.ipv4 = ?", response.IPv4).Group("r.mac").Order("r.mac").Scan(&response.Assignments).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		for i := range response.Assignments {
+			if mac, err := validateMAC(response.Assignments[i].MAC); err == nil {
+				response.Assignments[i].MAC = mac.ToColonDelimitedString()
+			}
+		}
+		c.JSON(http.StatusOK, response)
+	})
+
+	api.GET("/dhcp/requests", func(c *gin.Context) {
+		selectors := []string{"mac", "ipv4", "cidr", "range"}
+		count := 0
+		for _, selector := range selectors {
+			if c.Query(selector) != "" {
+				count++
+			}
+		}
+		if count != 1 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "exactly one of mac, ipv4, cidr, or range is required"})
+			return
+		}
+
+		query := db.Table("requests")
+		if macText := c.Query("mac"); macText != "" {
+			mac, err := validateMAC(macText)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid MAC address"})
+				return
+			}
+			query = query.Where("mac = ?", mac.ToColonDelimitedString())
+		} else if ipv4Text := c.Query("ipv4"); ipv4Text != "" {
+			ipv4, err := netip.ParseAddr(ipv4Text)
+			if err != nil || !ipv4.Is4() {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid IPv4 address"})
+				return
+			}
+			query = query.Where("ipv4 = ?", ipv4.String())
+		} else {
+			expression := c.Query("cidr")
+			if expression == "" {
+				expression = c.Query("range")
+			}
+			if subnet == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "no subnet configured; start the server with -s to query DHCP request ranges"})
+				return
+			}
+			subnetAddr, subnetErr := ipaddr.NewIPAddressString(subnet).ToAddress()
+			requestedAddr, requestErr := ipaddr.NewIPAddressString(expression).ToAddress()
+			if subnetErr != nil || requestErr != nil || !subnetAddr.Contains(requestedAddr) {
+				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("requested addresses must fall within the configured subnet %s", subnet)})
+				return
+			}
+			ips, err := ipListFromExpression(expression)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			query = query.Where("ipv4 IN ?", ips)
+		}
+		query, ok := whereSince(c, query, time.Time{}, "since", "received", false)
+		if !ok {
+			return
+		}
+		var requests []Request
+		if err := query.Order("received, mac, ipv4").Find(&requests).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		for i := range requests {
+			if mac, err := validateMAC(requests[i].Mac); err == nil {
+				requests[i].Mac = mac.ToColonDelimitedString()
+			}
+		}
+		c.JSON(http.StatusOK, requests)
 	})
 
 	api.PATCH("/devices/:mac/annotation", func(c *gin.Context) {
