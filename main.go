@@ -91,6 +91,7 @@ The PID file is rewritten on every daemon start; a stale PID file left by an unc
 Setting -E copies all environment variables to the child process.
 Setting -T 0 disables token checking entirely.
 Setting -a 0 (the default) disables new-device alert scanning; the first successful scan records a baseline and creates no alerts.
+The dashboard is served at /; log in with a token fetched from the Unix socket (see README).
 `,
 		)
 	}
@@ -237,6 +238,13 @@ Setting -a 0 (the default) disables new-device alert scanning; the first success
 			os.Exit(0)
 		}()
 		r := gin.Default()
+		// Apply the token middleware before any routes are registered; gin
+		// freezes the middleware chain into each route at registration time.
+		var ttc TokenChecker
+		if os.Getenv(listenerEnvVarName) != "" && maxTokens > 0 {
+			ttc = NewTokenChecker(maxTokens, maxTokenUses, tokenTimeout)
+			r = TokenCheckerHeader(r, ttc, tokenHeader)
+		}
 		var gormDb *gorm.DB
 		if databaseFilePath != "" {
 			var err error
@@ -255,12 +263,10 @@ Setting -a 0 (the default) disables new-device alert scanning; the first success
 			}
 			r = DhcpHostDir(r, gormDb, hostDirPath)
 		}
+		r = Dashboard(r, gormDb, subnetCIDR, hostDirPath, ttc)
 		// Run the server
 		if os.Getenv(listenerEnvVarName) != "" {
-			// As a daemon and use the token checker
-			ttc := NewTokenChecker(maxTokens, maxTokenUses, tokenTimeout)
 			if maxTokens > 0 {
-				r = TokenCheckerHeader(r, ttc, tokenHeader)
 				go func() {
 					// Serve the TokenPublisher over a Unix domain socket
 					if err := TokenCheckerPublisher(gin.Default(), ttc, tokenEndpointPath).RunFd(4); err != nil {

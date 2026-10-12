@@ -85,3 +85,23 @@ func TestTokenChecker_CheckAfterTimeout(t *testing.T) {
 	time.Sleep(3 * time.Millisecond)
 	assert.False(t, ttc.Check(token1), "Expected the token to expire after the timeout")
 }
+
+func TestTokenChecker_ValidateDoesNotConsumeUse(t *testing.T) {
+	ttc := NewTokenChecker(1, 1, time.Hour)
+	token1 := ttc.Get()
+	assert.True(t, ttc.Validate(token1), "Expected the token to validate")
+	assert.True(t, ttc.Validate(token1), "Expected validation not to consume a use")
+	assert.True(t, ttc.Check(token1), "Expected the token to still be accepted after validating")
+}
+
+func TestTokenChecker_ValidateInvalid(t *testing.T) {
+	ttc := NewTokenChecker(1, 1, time.Hour)
+	assert.False(t, ttc.Validate("not-a-real-token"), "Expected an unknown token to be invalid")
+}
+
+func TestTokenChecker_ValidateAfterTimeout(t *testing.T) {
+	ttc := NewTokenChecker(1, 2, 2*time.Millisecond)
+	token1 := ttc.Get()
+	time.Sleep(3 * time.Millisecond)
+	assert.False(t, ttc.Validate(token1), "Expected the token to expire after the timeout")
+}

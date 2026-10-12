@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>dnsmasq-web login</title>
+<style>
+body { font-family: system-ui, sans-serif; margin: 2rem; color: #1a1a1a; }
+.error { color: #b00; }
+.note { color: #666; font-style: italic; }
+</style>
+</head>
+<body>
+<h1>dnsmasq-web login</h1>
+{{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+<form method="post" action="/login">
+<label for="token">Token</label>
+<input type="password" id="token" name="token" autofocus>
+<button type="submit">Log in</button>
+</form>
+<p class="note">Paste a token issued by the daemon; fetch it from the Unix socket on the host (see README).</p>
+</body>
+</html>
