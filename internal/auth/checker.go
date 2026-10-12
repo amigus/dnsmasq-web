@@ -11,6 +11,7 @@ import (
 type TokenChecker interface {
 	Get() string
 	Check(token string) bool
+	Validate(token string) bool
 }
 
 type token struct {
@@ -82,6 +83,19 @@ func (ttc *Checker) Check(token string) bool {
 			}
 			ttc.tokens[i].count++
 			return true
+		}
+	}
+	return false
+}
+
+// Validate reports whether the token is valid without consuming one of its uses.
+func (ttc *Checker) Validate(token string) bool {
+	ttc.mu.Lock()
+	defer ttc.mu.Unlock()
+
+	for _, t := range ttc.tokens {
+		if t.uuid == token {
+			return !ttc.tokenExpired(t) && t.count < ttc.maxUses
 		}
 	}
 	return false

@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>dnsmasq-web dashboard</title>
+<style>
+body { font-family: system-ui, sans-serif; margin: 1rem; color: #1a1a1a; }
+h1 { font-size: 1.4rem; }
+h2 { font-size: 1.1rem; margin-top: 1.5rem; }
+table { border-collapse: collapse; margin-top: 0.5rem; width: 100%; }
+th, td { border: 1px solid #ccc; padding: 0.25rem 0.5rem; text-align: left; font-size: 0.9rem; }
+th { background: #f4f4f4; }
+.stats span { margin-right: 1.5rem; }
+.note { color: #666; font-style: italic; }
+</style>
+</head>
+<body>
+<h1>dnsmasq-web dashboard</h1>
+<p class="stats">
+{{if .Pool}}<span>Pool {{.Pool.Subnet}}: {{.Pool.Total}} addresses, {{.Pool.Used}} used, {{.Pool.Free}} free ({{.Pool.Utilization}}% utilization)</span>{{else}}<span class="note">Pool: not configured; start the server with -s</span>{{end}}
+{{range .Stats}}<span>{{.Label}}: {{.Value}}</span>{{end}}
+</p>
+{{range .Sections}}
+<h2>{{.Title}}</h2>
+{{if .Note}}<p class="note">{{.Note}}</p>{{end}}
+{{if .Rows}}
+<table>
+<tr>{{range .Headers}}<th>{{.}}</th>{{end}}</tr>
+{{range .Rows}}<tr>{{range .}}<td>{{.}}</td>{{end}}</tr>
+{{end}}
+</table>
+{{else}}<p class="note">None</p>{{end}}
+{{end}}
+{{if .CanLogout}}
+<p>
+<form method="post" action="/logout"><button type="submit">Log out</button></form>
+</p>
+{{end}}
+</body>
+</html>

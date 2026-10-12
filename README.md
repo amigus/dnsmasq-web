@@ -234,6 +234,22 @@ curl -s 'http://dhcp/requests?range=192.168.1.1-10' | jq
 }
 ```
 
+## Dashboard
+
+The server renders a read-only dashboard at `/`:
+pool utilization, leases, clients, devices with annotations, unacknowledged alerts, and reservations.
+It is server-rendered HTML with no JavaScript and no external assets.
+
+When token checking is enabled (daemon mode with `-T` above 0), the dashboard requires a login:
+fetch a token from the UNIX domain socket as shown below, open `/login`, and paste it.
+The token is validated without consuming one of its uses and is then carried in a browser-session cookie
+(`HttpOnly`, `SameSite=Strict`); `POST /logout` clears it.
+Tokens stay in memory only, so a server restart ends every dashboard session.
+
+Without `-s` the pool section shows a notice instead of utilization figures;
+without `-h` the reservations section shows a notice instead of the reservation table.
+In foreground mode (no `-d`) token checking is not applied and the dashboard needs no login.
+
 ## Security
 
 When running as a daemon with `-d`, the `-T`, `-c`, and `-t` options control the _TokenChecker_.
