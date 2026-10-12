@@ -87,3 +87,35 @@ func TestTokenCheckerPublisher(t *testing.T) {
 		t.Error("Expected a valid UUID in response", err)
 	}
 }
+
+func TestTokenCheckerHeaderCookieFallback(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	ttc := NewTokenChecker(1, 2, time.Hour)
+	validToken := ttc.Get()
+	r = TokenCheckerHeader(r, ttc, "X-Token")
+
+	r.GET("/", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(&http.Cookie{Name: dashboardCookieName, Value: validToken})
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code, "Expected the dashboard cookie to authenticate")
+}
+
+func TestTokenCheckerHeaderLoginExempt(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	ttc := NewTokenChecker(1, 1, time.Hour)
+	r = TokenCheckerHeader(r, ttc, "X-Token")
+
+	r.GET(dashboardLoginPath, func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, dashboardLoginPath, nil)
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code, "Expected the login route to be exempt from token checking")
+}
