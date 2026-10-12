@@ -32,6 +32,18 @@ func Release() error {
 	return runBuildScript("release")
 }
 
+// Toolchains installs the host cross-toolchains used by single-target
+// release builds into .toolchains.
+func Toolchains() error {
+	return runBuildScript("toolchains")
+}
+
+// ReleaseTarget builds one release target on the current host without
+// Docker, for example: mage releaseTarget linux-amd64-musl.
+func ReleaseTarget(target string) error {
+	return runBuildScript("release", target)
+}
+
 func PrepareReleaseImage() error {
 	return runBuildScript("prepare-release-image")
 }

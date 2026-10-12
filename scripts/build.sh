@@ -25,11 +25,16 @@ readonly RELEASE_TARGETS=(
 
 usage() {
 	cat <<'EOF'
-Usage: scripts/build.sh <debug|release|prepare-release-image|release-inner|clean>
+Usage: scripts/build.sh <debug|release|toolchains|prepare-release-image|release-inner|clean>
 
 debug         Build an unstripped host-architecture binary for local debugging.
               Requires a host C compiler for CGO (gcc, or $CC when set).
 release       Build the supported Linux release binaries, using Docker by default.
+release <target>
+              Build one release target on the current host without Docker
+              (for example: linux-amd64-musl). Downloads the matching musl
+              cross-toolchain into .toolchains when missing.
+toolchains    Install the host cross-toolchains used by host release builds.
 prepare-release-image
               Build the reusable local Docker image used for release builds.
 release-inner Internal entrypoint used by the Dockerized release build.
@@ -248,6 +253,45 @@ build_release_inner() {
 	fix_permissions
 }
 
+ensure_single_target_toolchains() {
+	local target="$1"
+	case "${target}" in
+		linux-amd64)
+			if ! command -v gcc >/dev/null 2>&1; then
+				printf 'target %s requires gcc in PATH\n' "${target}" >&2
+				return 1
+			fi
+			;;
+		linux-arm64)
+			if ! command -v aarch64-linux-gnu-gcc >/dev/null 2>&1; then
+				printf 'target %s requires aarch64-linux-gnu-gcc (apt install gcc-aarch64-linux-gnu)\n' "${target}" >&2
+				return 1
+			fi
+			;;
+		linux-amd64-musl)
+			ensure_musl_toolchain "x86_64-linux-musl-cross"
+			;;
+		linux-arm64-musl)
+			ensure_musl_toolchain "aarch64-linux-musl-cross"
+			;;
+	esac
+	ensure_git_safe_directory
+}
+
+build_release_single_target() {
+	local target="$1"
+	case " ${RELEASE_TARGETS[*]} " in
+		*" ${target} "*) ;;
+		*)
+			printf 'unsupported target: %s\n' "${target}" >&2
+			printf 'supported targets: %s\n' "${RELEASE_TARGETS[*]}" >&2
+			return 1
+			;;
+	esac
+	ensure_single_target_toolchains "${target}"
+	build_release_target "${target}"
+}
+
 build_release() {
 	if [[ "${BUILD_USE_CONTAINER:-1}" != "0" && -z "${DNSMASQ_WEB_BUILD_IN_CONTAINER:-}" ]]; then
 		local version label
@@ -303,7 +347,14 @@ main() {
 			build_debug
 			;;
 		release)
-			build_release
+			if [[ -n "${2:-}" ]]; then
+				build_release_single_target "$2"
+			else
+				build_release
+			fi
+			;;
+		toolchains)
+			ensure_host_release_toolchains
 			;;
 		prepare-release-image)
 			prepare_release_image

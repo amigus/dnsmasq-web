@@ -28,6 +28,8 @@ The DHCP reservation data is stored in files under the host directory.
 - On a developer machine, the first release build prepares a reusable Docker image and persistent Go cache volumes; later release builds reuse them instead of reinstalling packages and redownloading modules from scratch.
 - You can prebuild that reusable image explicitly with `bash scripts/build.sh prepare-release-image` or `mage prepareReleaseImage`.
 - Set `DNSMASQ_WEB_PREPARED_RELEASE_IMAGE=0` to force the old disposable-container behavior.
+- Single-target host builds need no Docker: `bash scripts/build.sh release linux-amd64-musl` (or `mage releaseTarget linux-amd64-musl`) builds just that target with the host Go toolchain and a cross C compiler.
+- The first single-target build downloads the matching musl cross-toolchain into `.toolchains/` (gitignored); `bash scripts/build.sh toolchains` or `mage toolchains` installs every host toolchain up front.
 
 ## CLI
 
