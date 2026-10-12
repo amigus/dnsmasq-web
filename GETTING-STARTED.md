@@ -53,6 +53,8 @@ Or build locally:
 ```bash
 bash scripts/build.sh debug    # dist/debug/dnsmasq-web; needs gcc (CGO)
 bash scripts/build.sh release  # dist/release/; uses Docker
+bash scripts/build.sh release linux-amd64-musl
+                               # one target on the host, no Docker
 ```
 
 ## Step 3 — Create the host directory and start the server

@@ -13,8 +13,11 @@ The project now treats `dnsmasq-web` as the only supported executable surface.
 
 - `bash scripts/build.sh debug` builds the local debug binary at `dist/debug/dnsmasq-web`.
 - `bash scripts/build.sh release` builds the supported release artifacts at `dist/release/`.
+- `bash scripts/build.sh release <target>` builds one release target on the host without Docker.
+- `bash scripts/build.sh toolchains` installs the host cross-toolchains into `.toolchains/`.
 - `mage` wraps the debug build.
 - `mage release` wraps the release build.
+- `mage releaseTarget <target>` and `mage toolchains` wrap the single-target host build and toolchain install.
 - The release build is containerized by default so local artifacts match CI targets and naming.
 
 ## Supported Release Targets
