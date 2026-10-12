@@ -70,6 +70,9 @@ The legacy shell helpers in `cli/` are retained only as reference material and a
   GET with `cidr`: retrieve requests filtered by CIDR.
   GET with `range`: retrieve requests filtered by range.
   The `cidr` or `range` must fall within the subnet configured at startup with `-s subnet`; queries outside the subnet, or made when no subnet is configured, return a 400 error.
+- `/pool`
+  GET: retrieve subnet-wide pool utilization (usable hosts, used, free, one-decimal utilization).
+  Requires the subnet configured at startup with `-s subnet`; utilization is subnet-wide, not dnsmasq `dhcp-range`-scoped.
 
 ### Versioned API
 
@@ -81,6 +84,7 @@ The legacy shell helpers in `cli/` are retained only as reference material and a
 - `PATCH` and `DELETE /api/v1/devices/:mac/annotation` manage application-owned metadata without changing DHCP observations or reservations.
 - `GET /api/v1/alerts`, `GET /api/v1/alerts/:id`, and `PATCH /api/v1/alerts/:id` expose persistent alert acknowledgement state.
 - Alert scanning is opt-in with the server's `-a interval` flag: the first successful scan records a baseline and creates no alerts, and each later scan creates exactly one alert per newly observed device MAC, snapshotting its hostname and active IPv4 at detection. Scan failures are logged and retried without advancing the baseline.
+- `GET /api/v1/pool` returns subnet-wide host capacity, used/free counts, and utilization; it is subnet-wide rather than dnsmasq `dhcp-range`-scoped.
 
 The `observed` domain in a device response is derived from DHCP and read-only. `annotation` is optional application-owned metadata; omitted fields preserve existing annotation values, supplied empty scalar values clear them, and supplied tags replace the tag list. Annotation fields are trimmed; names and owners are limited to 256 bytes, notes to 4096 bytes, and tags to 32 unique non-empty values of at most 64 bytes.
 

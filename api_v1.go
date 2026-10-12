@@ -195,6 +195,19 @@ func ApiV1(r *gin.Engine, db *gorm.DB, subnet string) {
 	db.AutoMigrate(&DeviceAnnotation{}, &Alert{}, &DeviceAlertState{})
 	api := r.Group("/api/v1")
 
+	api.GET("/pool", func(c *gin.Context) {
+		if subnet == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "no subnet configured; start the server with -s to query pool utilization"})
+			return
+		}
+		report, err := poolReport(db, subnet)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, report)
+	})
+
 	api.GET("/devices", func(c *gin.Context) {
 		result, err := devices(db)
 		if err != nil {
