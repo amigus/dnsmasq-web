@@ -9,8 +9,9 @@ import (
 )
 
 var requestsCmd = &cobra.Command{
-	Use:   "requests",
-	Short: "Show request history for a CIDR or range",
+	Use:        "requests",
+	Short:      "Show request history for a CIDR or range",
+	Deprecated: "use 'dhcp requests' for the canonical v1 API",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cl := cmd.Context().Value("client").(*client.Client)
 		cfg := cmd.Context().Value("config").(*client.Config)

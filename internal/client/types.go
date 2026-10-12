@@ -42,6 +42,12 @@ type MacHistory struct {
 	VendorClass      string `json:"vendor_class"`
 }
 
+// AddressHistory represents the assignment history for an IPv4 address.
+type AddressHistory struct {
+	IPv4        string       `json:"ipv4"`
+	Assignments []MacHistory `json:"assignments"`
+}
+
 // Request represents a DHCP request event.
 type Request struct {
 	Received         string `json:"received"`
