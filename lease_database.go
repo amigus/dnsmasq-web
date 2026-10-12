@@ -107,9 +107,12 @@ func whereSince(c *gin.Context, db *gorm.DB, oldest time.Time, name, field strin
 	return nil, false
 }
 
-func LeaseDatabase(r *gin.Engine, db *gorm.DB, subnet string) *gin.Engine {
+func LeaseDatabase(r *gin.Engine, db *gorm.DB, subnet string, alertInterval time.Duration) *gin.Engine {
 	db.AutoMigrate(&Request{}, &Lease{}, &Client{})
 	ApiV1(r, db, subnet)
+	if alertInterval > 0 {
+		startAlertScanner(db, alertInterval)
+	}
 
 	r.GET("/leases", func(c *gin.Context) {
 		var active []struct {

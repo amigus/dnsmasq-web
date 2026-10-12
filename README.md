@@ -16,6 +16,7 @@ The DHCP reservation data is stored in files under the host directory.
 1. Download the appropriate binary from the [releases](https://github.com/amigus/dnsmasq-web/releases/latest) page to the DHCP server.
 1. Run the API server with `dnsmasq-web server`, for example `sudo dnsmasq-web server -d -l :80 -T 0`.
 1. Optionally pass `-s subnet` (e.g. `-s 192.168.1.0/24`) to configure the subnet that `/requests` queries must fall within.
+1. Optionally pass `-a interval` (e.g. `-a 1m`) to enable new-device alert scanning; the default `0` disables it.
 
 ## Local Builds
 
@@ -77,6 +78,7 @@ The legacy shell helpers in `cli/` are retained only as reference material and a
 - `GET /api/v1/devices/:mac/addresses` returns that device's historical IPv4 assignments.
 - `PATCH` and `DELETE /api/v1/devices/:mac/annotation` manage application-owned metadata without changing DHCP observations or reservations.
 - `GET /api/v1/alerts`, `GET /api/v1/alerts/:id`, and `PATCH /api/v1/alerts/:id` expose persistent alert acknowledgement state.
+- Alert scanning is opt-in with the server's `-a interval` flag: the first successful scan records a baseline and creates no alerts, and each later scan creates exactly one alert per newly observed device MAC, snapshotting its hostname and active IPv4 at detection. Scan failures are logged and retried without advancing the baseline.
 
 The `observed` domain in a device response is derived from DHCP and read-only. `annotation` is optional application-owned metadata; omitted fields preserve existing annotation values, supplied empty scalar values clear them, and supplied tags replace the tag list. Annotation fields are trimmed; names and owners are limited to 256 bytes, notes to 4096 bytes, and tags to 32 unique non-empty values of at most 64 bytes.
 

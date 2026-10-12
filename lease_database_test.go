@@ -23,7 +23,7 @@ func setupRouterWithDB() (*gin.Engine, *gorm.DB) {
 
 	db.Exec(testDatabaseSQL)
 
-	return LeaseDatabase(r, db, "192.168.1.0/24"), db
+	return LeaseDatabase(r, db, "192.168.1.0/24", 0), db
 }
 
 func TestLeasesEndpoint(t *testing.T) {
@@ -192,7 +192,7 @@ func TestRequestsEndpointNoSubnet(t *testing.T) {
 	r := gin.Default()
 	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	db.Exec(testDatabaseSQL)
-	router := LeaseDatabase(r, db, "")
+	router := LeaseDatabase(r, db, "", 0)
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/requests?cidr=192.168.1.0/28", nil)

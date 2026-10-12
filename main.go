@@ -47,7 +47,7 @@ func runServerMain() {
 	var databaseFilePath, hostDirPath, listenOn, pidFilePath, unixSocketPath, userFlag, groupFlag, subnetCIDR string
 	var daemonize, preserveEnv, verbose bool
 	var maxTokens, maxTokenUses int
-	var tokenTimeout time.Duration
+	var tokenTimeout, alertInterval time.Duration
 
 	flag.BoolVar(&daemonize, "d", false, "fork and run as a daemon")
 	flag.BoolVar(&preserveEnv, "E", false, "preserve environment when daemonizing")
@@ -62,6 +62,7 @@ func runServerMain() {
 	flag.IntVar(&maxTokens, "T", 1, "the maximum number of tokens to issue at a time (0 disables token checking)")
 	flag.IntVar(&maxTokenUses, "c", 0, "the maximum number of times a token can be used (the default 0 means unlimited)")
 	flag.DurationVar(&tokenTimeout, "t", time.Duration(0), "the duration a token is valid (the default 0 means forever)")
+	flag.DurationVar(&alertInterval, "a", 0, "the interval between new-device alert scans (the default 0 disables alerting)")
 	flag.BoolVar(&verbose, "v", false, "print verbose output")
 	flag.Bool("V", false, "print the version and exit")
 	flag.Usage = func() {
@@ -71,7 +72,7 @@ Dnsmasq Web is a database-backed JSON/HTTP API for Dnsmasq.
 
 Usage: %s [options] [-d [daemonize options]]
 Options:
-    -f database-file -h host-dir -l address [-s subnet] [-v]
+    -f database-file -h host-dir -l address [-s subnet] [-a alert-interval] [-v]
 Daemonize Options:
     [-E]
     [-u user] [-g group]
@@ -89,6 +90,7 @@ The tokens are kept in memory and are not persisted across restarts.
 The PID file is rewritten on every daemon start; a stale PID file left by an unclean shutdown is silently overwritten.
 Setting -E copies all environment variables to the child process.
 Setting -T 0 disables token checking entirely.
+Setting -a 0 (the default) disables new-device alert scanning; the first successful scan records a baseline and creates no alerts.
 `,
 		)
 	}
@@ -244,7 +246,7 @@ Setting -T 0 disables token checking entirely.
 					databaseFilePath, err)
 				os.Exit(1)
 			}
-			r = LeaseDatabase(r, gormDb, subnetCIDR)
+			r = LeaseDatabase(r, gormDb, subnetCIDR, alertInterval)
 		}
 		if hostDirPath != "" {
 			if gormDb == nil {
