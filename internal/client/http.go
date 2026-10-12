@@ -301,3 +301,81 @@ func (c *Client) DeleteReservation(mac string) error {
 	endpoint := fmt.Sprintf("/reservations/%s", mac)
 	return c.do("DELETE", endpoint, nil, nil)
 }
+
+// GetV1Devices fetches canonical observed devices with annotations.
+func (c *Client) GetV1Devices() ([]Device, error) {
+	var devices []Device
+	if err := c.do("GET", "/api/v1/devices", nil, &devices); err != nil {
+		return nil, err
+	}
+	return devices, nil
+}
+
+// GetV1Device fetches one canonical device by MAC address.
+func (c *Client) GetV1Device(mac string) (*Device, error) {
+	var device Device
+	endpoint := fmt.Sprintf("/api/v1/devices/%s", mac)
+	if err := c.do("GET", endpoint, nil, &device); err != nil {
+		return nil, err
+	}
+	return &device, nil
+}
+
+// GetV1DeviceAddresses fetches historical IPv4 assignments for a device MAC.
+func (c *Client) GetV1DeviceAddresses(mac string) ([]DeviceAddress, error) {
+	var addresses []DeviceAddress
+	endpoint := fmt.Sprintf("/api/v1/devices/%s/addresses", mac)
+	if err := c.do("GET", endpoint, nil, &addresses); err != nil {
+		return nil, err
+	}
+	return addresses, nil
+}
+
+// UpdateV1DeviceAnnotation patches application-owned annotation fields for a device MAC.
+func (c *Client) UpdateV1DeviceAnnotation(mac string, patch AnnotationPatch) (*DeviceAnnotation, error) {
+	var annotation DeviceAnnotation
+	endpoint := fmt.Sprintf("/api/v1/devices/%s/annotation", mac)
+	if err := c.do("PATCH", endpoint, patch, &annotation); err != nil {
+		return nil, err
+	}
+	return &annotation, nil
+}
+
+// DeleteV1DeviceAnnotation removes the annotation for a device MAC.
+func (c *Client) DeleteV1DeviceAnnotation(mac string) error {
+	endpoint := fmt.Sprintf("/api/v1/devices/%s/annotation", mac)
+	return c.do("DELETE", endpoint, nil, nil)
+}
+
+// GetV1Alerts fetches persistent device alerts, newest first.
+func (c *Client) GetV1Alerts(unacknowledgedOnly bool) ([]Alert, error) {
+	endpoint := "/api/v1/alerts"
+	if unacknowledgedOnly {
+		endpoint += "?unacknowledged=1"
+	}
+	var alerts []Alert
+	if err := c.do("GET", endpoint, nil, &alerts); err != nil {
+		return nil, err
+	}
+	return alerts, nil
+}
+
+// GetV1Alert fetches one device alert by ID.
+func (c *Client) GetV1Alert(id string) (*Alert, error) {
+	var alert Alert
+	endpoint := fmt.Sprintf("/api/v1/alerts/%s", id)
+	if err := c.do("GET", endpoint, nil, &alert); err != nil {
+		return nil, err
+	}
+	return &alert, nil
+}
+
+// AcknowledgeV1Alert marks a device alert acknowledged.
+func (c *Client) AcknowledgeV1Alert(id string) (*Alert, error) {
+	var alert Alert
+	endpoint := fmt.Sprintf("/api/v1/alerts/%s", id)
+	if err := c.do("PATCH", endpoint, map[string]any{"acknowledged": true}, &alert); err != nil {
+		return nil, err
+	}
+	return &alert, nil
+}

@@ -75,3 +75,62 @@ type RequestCount struct {
 	VendorClass string `json:"vendor_class"`
 	Count       int    `json:"count"`
 }
+
+// DeviceAnnotation represents application-owned device metadata.
+type DeviceAnnotation struct {
+	Name  string   `json:"name"`
+	Owner string   `json:"owner"`
+	Notes string   `json:"notes"`
+	Tags  []string `json:"tags"`
+}
+
+// AnnotationPatch carries optional annotation fields for a PATCH request.
+// Nil fields are omitted; empty strings and slices clear stored values.
+type AnnotationPatch struct {
+	Name  *string   `json:"name,omitempty"`
+	Owner *string   `json:"owner,omitempty"`
+	Notes *string   `json:"notes,omitempty"`
+	Tags  *[]string `json:"tags,omitempty"`
+}
+
+// DeviceObservation represents DHCP-observed facts for a device.
+type DeviceObservation struct {
+	Hostname     string `json:"hostname"`
+	ClientID     string `json:"client_id"`
+	VendorClass  string `json:"vendor_class"`
+	FirstSeen    string `json:"first_seen"`
+	LastSeen     string `json:"last_seen"`
+	RequestCount int    `json:"request_count"`
+}
+
+// DeviceLease represents an active lease held by a device.
+type DeviceLease struct {
+	IPv4    string `json:"ipv4"`
+	Added   string `json:"added"`
+	Renewed string `json:"renewed"`
+}
+
+// Device represents a canonical device keyed by MAC address.
+type Device struct {
+	MAC          string            `json:"mac"`
+	Observed     DeviceObservation `json:"observed"`
+	ActiveLeases []DeviceLease     `json:"active_leases"`
+	Annotation   *DeviceAnnotation `json:"annotation,omitempty"`
+}
+
+// DeviceAddress represents a historical IPv4 assignment for a device.
+type DeviceAddress struct {
+	IPv4      string `json:"ipv4"`
+	FirstSeen string `json:"first_seen"`
+	LastSeen  string `json:"last_seen"`
+}
+
+// Alert represents a persistent new-device alert.
+type Alert struct {
+	ID           uint    `json:"id"`
+	MAC          string  `json:"mac"`
+	Hostname     string  `json:"hostname"`
+	IPv4         string  `json:"ipv4"`
+	DetectedAt   string  `json:"detected_at"`
+	Acknowledged *string `json:"acknowledged_at"`
+}

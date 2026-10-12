@@ -60,9 +60,38 @@ dnsmasq-web addresses aa:bb:cc:dd:ee:ff --output json
 ### Devices
 
 ```bash
+# Deprecated: MAC history for an IPv4 address
 dnsmasq-web devices 192.168.1.90
-dnsmasq-web devices 192.168.1.90 --output json
+
+# Canonical v1 device inventory
+dnsmasq-web devices list
+dnsmasq-web devices get bc:32:b2:3b:13:d4
+dnsmasq-web devices addresses bc:32:b2:3b:13:d4
+dnsmasq-web devices list --output json
 ```
+
+### Device Annotations
+
+```bash
+dnsmasq-web devices annotation set bc:32:b2:3b:13:d4 --name "Living-room TV" --owner Household --tag iot --tag media
+dnsmasq-web devices annotation set bc:32:b2:3b:13:d4 --notes "HDMI 2"
+dnsmasq-web devices annotation set bc:32:b2:3b:13:d4 --clear-tags
+dnsmasq-web devices annotation delete bc:32:b2:3b:13:d4
+```
+
+`set` sends only the fields you pass. `--tag` is repeatable and replaces the tag set; `--clear-name`, `--clear-owner`, `--clear-notes`, and `--clear-tags` clear stored values. Passing a set and a clear flag for the same field is rejected locally.
+
+### Alerts
+
+```bash
+dnsmasq-web alerts list
+dnsmasq-web alerts list --unacknowledged
+dnsmasq-web alerts get 7
+dnsmasq-web alerts acknowledge 7
+dnsmasq-web alerts watch --interval 30s
+```
+
+`watch` polls the server for unacknowledged alerts and prints only alerts it has not shown before in that run; it never acknowledges anything. Stop it with Ctrl-C.
 
 ### Requests
 
