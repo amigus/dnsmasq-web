@@ -134,3 +134,12 @@ type Alert struct {
 	DetectedAt   string  `json:"detected_at"`
 	Acknowledged *string `json:"acknowledged_at"`
 }
+
+// Pool represents subnet-wide utilization.
+type Pool struct {
+	Subnet      string  `json:"subnet"`
+	Total       int     `json:"total"`
+	Used        int     `json:"used"`
+	Free        int     `json:"free"`
+	Utilization float64 `json:"utilization"`
+}

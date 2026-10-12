@@ -114,6 +114,19 @@ func LeaseDatabase(r *gin.Engine, db *gorm.DB, subnet string, alertInterval time
 		startAlertScanner(db, alertInterval)
 	}
 
+	r.GET("/pool", func(c *gin.Context) {
+		if subnet == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "no subnet configured; start the server with -s to query pool utilization"})
+			return
+		}
+		report, err := poolReport(db, subnet)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, report)
+	})
+
 	r.GET("/leases", func(c *gin.Context) {
 		var active []struct {
 			Mac         string `json:"mac"`

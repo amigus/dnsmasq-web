@@ -379,3 +379,12 @@ func (c *Client) AcknowledgeV1Alert(id string) (*Alert, error) {
 	}
 	return &alert, nil
 }
+
+// GetV1Pool fetches subnet-wide pool utilization.
+func (c *Client) GetV1Pool() (*Pool, error) {
+	var pool Pool
+	if err := c.do("GET", "/api/v1/pool", nil, &pool); err != nil {
+		return nil, err
+	}
+	return &pool, nil
+}
