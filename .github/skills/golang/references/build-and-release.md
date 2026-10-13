@@ -6,112 +6,87 @@
 - [`go build` flags](https://pkg.go.dev/cmd/go#hdr-Compile_packages_and_dependencies)
 - [`go test` flags](https://pkg.go.dev/cmd/go#hdr-Test_packages)
 - [Magefile docs](https://magefile.org/) (the build orchestrator)
-- Docker Engine reference (for the release path)
 
 ## Project Build Layout
 
 | Path | Purpose |
 |---|---|
-| `Magefile.go` | `//go:build mage` targets wrapping `scripts/build.sh` |
-| `scripts/build.sh` | The single source of truth for build modes |
-| `scripts/release.Dockerfile` | The reusable release image |
-| `dist/debug/` | Local debug binary + runtime artifacts (pid, sock, reservations.d) |
-| `dist/release/` | Multi-arch release artifacts (built inside Docker by default) |
-| `.toolchains/` | Downloaded musl cross-compilers (host-only) |
+| `Magefile.go` | `//go:build mage` targets for host builds and shell-helper env |
+| `bin/` | Host binaries produced by `mage Binaries` |
+| `cli/` | Legacy POSIX shell helpers (reference material, not built) |
 | `.config/dlv/` | Delve config for the VS Code debugger |
-| `.vscode/{launch,tasks}.json` | Debug + smoke tasks |
+| `.vscode/{launch,tasks}.json` | Debug + build tasks |
 
 ## Build Modes
 
-`scripts/build.sh <mode>`:
-
-| Mode | What it does | When to use it |
-|---|---|---|
-| `debug` | Host-arch CGO build → `dist/debug/dnsmasq-web` | Default. Fast inner loop. |
-| `release` | All supported targets via Docker (default) or host | Tagging a release or reproducing CI artifacts |
-| `prepare-release-image` | Builds the reusable release image once | Speeds up repeated `release` invocations |
-| `release-inner` | Internal entrypoint used by the Dockerized release build | Don't call from your shell |
-| `clean` | Removes `dist/` | After toggling between modes |
+- `go build -o dnsmasq-web .` — host debug binary in the repository root. Fast inner loop.
+- `mage` (default `All`) — shell-helper environment plus host binaries.
+- `mage Binaries` — `dnsmasq-web-amd64` and `dnsmasq-web-arm64` via cross-`gcc`.
+- Release artifacts are built in CI by `.github/workflows/release.yml` via `go-cross/cgo-actions@v1`; there is no supported local multi-arch release path.
 
 ## CGO Is Required
 
 `github.com/mattn/go-sqlite3` is a CGO package. Implications:
 
-- **Cross-compilation needs a C cross-toolchain.** The release script pulls them in the container (`scripts/release.Dockerfile`); host builds need them too if you flip `BUILD_USE_CONTAINER=0`.
-- **`CGO_ENABLED=1` is the default** in `scripts/build.sh` debug and release flows. Don't override it.
-- **musl targets use `-extldflags '-static -fpic'`.** See `release_ldflags` in `scripts/build.sh`. This produces a self-contained binary.
-- **glibc targets use the matching cross-`gcc`.** `aarch64-linux-gnu-gcc` for arm64.
+- **Host builds need a working C compiler** (`gcc`, or whatever `CC` points to).
+- **Cross-compilation needs the matching C cross-toolchain** (e.g. `aarch64-suse-linux-gcc` for arm64), as wired in `Magefile.go`.
+- Don't override `CGO_ENABLED=0` for these builds.
 
 ## Supported Release Targets
 
 ```
 linux-amd64
-linux-arm64
 linux-amd64-musl
+linux-arm64
 linux-arm64-musl
+linux-arm-7
 ```
 
-CI asserts exactly 4 artifacts (see `.github/workflows/release.yml` "Validate artifact set"). If you add a target, update both `RELEASE_TARGETS` in `scripts/build.sh` and the CI count check.
+The release workflow matrix (see `.github/workflows/release.yml`) defines which targets CI builds; update that matrix if a target changes.
 
-## Mage Targets (Mirrors `scripts/build.sh`)
+## Mage Targets
 
-| Target | Wraps |
+| Target | Does |
 |---|---|
-| `mage` (default) / `mage Debug` | `scripts/build.sh debug` |
-| `mage Release` | `scripts/build.sh release` |
-| `mage PrepareReleaseImage` | `scripts/build.sh prepare-release-image` |
-| `mage Binaries` | `scripts/build.sh release` (alias) |
-| `mage All` | `scripts/build.sh debug` (alias) |
-| `mage CleanBinaries` | `scripts/build.sh clean` |
-| `mage CleanDaemonFiles` | removes pid, sock, reservations.d from `dist/debug/` |
+| `mage` (default) / `mage All` | shell-helper env + host binaries |
+| `mage Binaries` | host binaries only (`dnsmasq-web-amd64`, `dnsmasq-web-arm64`) |
+| `mage ClientEnv` / `mage FullClientEnv` | build the legacy `cli/` shell helper environment |
+| `mage CleanBinaries` | remove built binaries |
+| `mage CleanClientEnv` | remove the shell-helper environment |
 | `mage Clean` | both cleans |
-| `mage Start` | debug-build then run `server -v -f leases.db -h reservations.d -d -S ...sock -P ...pid` |
-| `mage Kill` | SIGTERM the daemon from its pid file |
-| `mage Stop` | `Kill` then `CleanDaemonFiles` |
 
-The `mage` binary reads the `//go:build mage` constraint on `Magefile.go`. VS Code's `tasks.json` sets `go.buildTags: mage` so intellisense sees the right build.
+The `mage` binary reads the `//go:build mage` constraint on `Magefile.go`.
 
-## The Three Things CI Runs
+## What CI Runs
 
 From `.github/workflows/test.yml`:
 
 ```bash
 go test -v ./...
-bash scripts/build.sh debug
-./dist/debug/dnsmasq-web --help
-./dist/debug/dnsmasq-web reservations --help
-./dist/debug/dnsmasq-web server -V
 ```
 
-These four lines are the minimum that proves a change is shippable locally. Match them in your validation.
+Locally, prove a change is shippable with:
+
+```bash
+go test -v ./...
+go build -o dnsmasq-web .
+./dnsmasq-web --help
+./dnsmasq-web server -V
+```
 
 ## Versioning
 
 - `main.Version` is a package-level string in `main.go` set via `-ldflags '-X 'main.Version=...'` during the build.
-- The debug ldflags only set the version (no `-s -w`); the release ldflags add `-s -w` for stripping.
-- The version string is `"<git describe> # <UTC ISO 8601 timestamp>"` produced by `build_version` in `scripts/build.sh`. The format is part of the contract — the smoke test just checks `-V` is non-empty.
+- The version string is `"<git describe> built <date> by <user>@<host>"`, produced by `buildInfo` in `Magefile.go` and the release workflow's "Declare version" step. The smoke test only checks `-V` is non-empty.
 
-## Caches
+## Things to Verify After Build Changes
 
-| Cache | Where | When populated |
-|---|---|---|
-| Go module cache | Docker volume `dnsmasq-web-go-mod-cache` | First `release` build |
-| Go build cache | Docker volume `dnsmasq-web-go-build-cache` | First `release` build |
-| Prepared release image | `dnsmasq-web-release:golang-1.23.12-bookworm` (or `DNSMASQ_WEB_GO_IMAGE` override) | First `release` build, or `prepare-release-image` |
-| Host musl toolchains | `.toolchains/<prefix>` | First `release` build with `BUILD_USE_CONTAINER=0` |
-
-Set `DNSMASQ_WEB_PREPARED_RELEASE_IMAGE=0` to force the legacy disposable-container behavior. The repo defaults to the cached path for local iteration; CI uses the disposable path because the cache is per-run.
-
-## Things to Verify After Build-Script Changes
-
-1. `bash scripts/build.sh debug` succeeds.
-2. `./dist/debug/dnsmasq-web --help` prints help.
-3. `./dist/debug/dnsmasq-web server -V` prints the version.
-4. `bash scripts/build.sh release` produces exactly 4 files in `dist/release/` matching the artifact naming pattern `dnsmasq-web_<label>_<target>`.
-5. The CI workflow's "Validate artifact set" step would still pass.
+1. `go test -v ./...` succeeds.
+2. `go build -o dnsmasq-web .` succeeds (needs a host C compiler).
+3. `./dnsmasq-web --help` prints help.
+4. `./dnsmasq-web server -V` prints the version.
 
 ## Things to Verify After `Magefile.go` Changes
 
 1. `mage -l` lists the target you expect.
 2. `mage` (default target) builds.
-3. New or renamed targets still wrap the same `scripts/build.sh` mode.

@@ -22,7 +22,7 @@ Detailed references live in `./references/`:
 | Topic | Reference |
 |---|---|
 | Code style, naming, control flow, errors | [code-style.md](./references/code-style.md) |
-| CGO, build, release, mage, Docker | [build-and-release.md](./references/build-and-release.md) |
+| CGO, build, release, mage | [build-and-release.md](./references/build-and-release.md) |
 | HTTP handlers, Gin, JSON, validation, auth | [http-handlers.md](./references/http-handlers.md) |
 | SQLite + GORM query patterns | [database-and-queries.md](./references/database-and-queries.md) |
 | Cobra CLI, env/flag precedence, output formatting | [cli-and-output.md](./references/cli-and-output.md) |
@@ -36,7 +36,7 @@ Load this skill (or the more specific reference) when:
 
 - Writing or reviewing any `.go` file
 - Adding, removing, or refactoring a route, command, query, or package
-- Touching `go.mod`, `Magefile.go`, `scripts/build.sh`, `scripts/release.Dockerfile`
+- Touching `go.mod`, `Magefile.go`
 - Touching `cmd/`, `internal/`, `main.go`, `daemon.go`, `host_dir.go`, `lease_database.go`, `token*.go`
 - Answering a "how does X work here" question that ends in a Go code change
 
@@ -64,7 +64,7 @@ Load this skill (or the more specific reference) when:
    ```bash
    go test ./...
    ```
-   If you touched build/packaging, also run `bash scripts/build.sh debug` (or `mage`) and the smoke test in `.vscode/tasks.json`.
+   If you touched build/packaging, also run `go build -o dnsmasq-web .` (or `mage`).
 6. **Update docs** in the same change when the surface changed: [`README.md`](../../../README.md), [`CLI.md`](../../../CLI.md), or [`IMPLEMENTATION.md`](../../../IMPLEMENTATION.md).
 7. **Call out divergences** in the PR/response. See [`divergences.md`](./references/divergences.md).
 
@@ -86,12 +86,12 @@ The full version is in [`build-and-release.md`](./references/build-and-release.m
 
 | Want | Run |
 |---|---|
-| Local debug build | `mage` (or `bash scripts/build.sh debug`) → `dist/debug/dnsmasq-web` |
-| Smoke-test the binary | `./dist/debug/dnsmasq-web --help` and `./dist/debug/dnsmasq-web server -V` |
-| Multi-arch release | `bash scripts/build.sh release` (uses Docker; reuses prepared image + Go module/build cache volumes) |
-| Prebuild the release image once | `bash scripts/build.sh prepare-release-image` or `mage prepareReleaseImage` |
-| Run the daemon locally | `mage Start` (or follow the args in `.vscode/launch.json`) |
-| Stop the daemon + clean up | `mage Stop` then `mage Clean` |
+| Local debug build | `go build -o dnsmasq-web .` |
+| Smoke-test the binary | `./dnsmasq-web --help` and `./dnsmasq-web server -V` |
+| Release artifacts | CI (`.github/workflows/release.yml` via `go-cross/cgo-actions@v1`) |
+| Build host binaries + shell-helper env | `mage` |
+| Run the daemon locally | follow the args in `.vscode/launch.json` |
+| Clean build outputs | `mage Clean` |
 
 CGO is required. The release script handles cross toolchains inside the container. A native debug build needs `gcc` on the host (it builds `go-sqlite3`).
 

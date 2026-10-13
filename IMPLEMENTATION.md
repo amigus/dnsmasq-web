@@ -11,26 +11,16 @@ The project now treats `dnsmasq-web` as the only supported executable surface.
 
 ## Build Contract
 
-- `bash scripts/build.sh debug` builds the local debug binary at `dist/debug/dnsmasq-web`.
-- `bash scripts/build.sh release` builds the supported release artifacts at `dist/release/`.
-- `mage` wraps the debug build.
-- `mage release` wraps the release build.
-- The release build is containerized by default so local artifacts match CI targets and naming.
-
-## Supported Release Targets
-
-- `linux-amd64`
-- `linux-arm64`
-- `linux-amd64-musl`
-- `linux-arm64-musl`
+- `go build -o dnsmasq-web .` builds the local debug binary in the repository root.
+- `mage` builds the shell-helper environment and the host binaries (`dnsmasq-web-amd64`, `dnsmasq-web-arm64`).
+- Release artifacts are built in CI by `.github/workflows/release.yml` via `go-cross/cgo-actions@v1`.
 
 ## Verification
 
 - `go test ./...`
-- `bash scripts/build.sh debug`
-- `bash scripts/build.sh release`
-- `./dist/debug/dnsmasq-web --help`
-- `./dist/debug/dnsmasq-web server -V`
+- `go build -o dnsmasq-web .`
+- `./dnsmasq-web --help`
+- `./dnsmasq-web server -V`
 
 ## Follow-On Cleanup
 

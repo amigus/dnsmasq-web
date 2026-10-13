@@ -4,10 +4,12 @@
 		{
 			"label": "build-debug",
 			"type": "shell",
-			"command": "bash",
+			"command": "go",
 			"args": [
-				"scripts/build.sh",
-				"debug"
+				"build",
+				"-o",
+				"dnsmasq-web",
+				"."
 			],
 			"isBackground": false,
 			"group": "build"
@@ -18,7 +20,7 @@
 			"command": "bash",
 			"args": [
 				"-lc",
-				"./dist/debug/dnsmasq-web --help >/tmp/dnsmasq-web-help.txt && ./dist/debug/dnsmasq-web server -V >/tmp/dnsmasq-web-version.txt && test -s /tmp/dnsmasq-web-help.txt && test -s /tmp/dnsmasq-web-version.txt"
+				"./dnsmasq-web --help >/tmp/dnsmasq-web-help.txt && ./dnsmasq-web server -V >/tmp/dnsmasq-web-version.txt && test -s /tmp/dnsmasq-web-help.txt && test -s /tmp/dnsmasq-web-version.txt"
 			],
 			"isBackground": false,
 			"group": "test"
@@ -26,10 +28,9 @@
 		{
 			"label": "build-release",
 			"type": "shell",
-			"command": "bash",
+			"command": "mage",
 			"args": [
-				"scripts/build.sh",
-				"release"
+				"Binaries"
 			],
 			"isBackground": false,
 			"group": "build"

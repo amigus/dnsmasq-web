@@ -20,14 +20,9 @@ The DHCP reservation data is stored in files under the host directory.
 
 ## Local Builds
 
-- `bash scripts/build.sh debug` builds the host-architecture debug binary at `dist/debug/dnsmasq-web`.
-- `mage` is a thin wrapper around the same debug build.
-- Debug builds compile `github.com/mattn/go-sqlite3` with CGO, so they need a working host C compiler (`gcc` by default, or whatever `CC` points to); `scripts/build.sh debug` fails fast with a hint when the compiler is missing.
-- `bash scripts/build.sh release` builds the supported Linux release artifacts at `dist/release/`.
-- Local release builds use Docker by default so local output matches CI artifact targets and naming.
-- On a developer machine, the first release build prepares a reusable Docker image and persistent Go cache volumes; later release builds reuse them instead of reinstalling packages and redownloading modules from scratch.
-- You can prebuild that reusable image explicitly with `bash scripts/build.sh prepare-release-image` or `mage prepareReleaseImage`.
-- Set `DNSMASQ_WEB_PREPARED_RELEASE_IMAGE=0` to force the old disposable-container behavior.
+- `go build -o dnsmasq-web .` builds the host-architecture debug binary in the repository root.
+- `mage` builds the CLI shell helper environment and the `dnsmasq-web-amd64` / `dnsmasq-web-arm64` host binaries into the repository root.
+- CGO builds compile `github.com/mattn/go-sqlite3`, so they need a working host C compiler (`gcc` by default, or whatever `CC` points to).
 
 ## CLI
 

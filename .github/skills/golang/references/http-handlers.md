@@ -120,7 +120,7 @@ State lives in memory and dies on restart. Do not add a backing store. Do not mo
 - **Foreground** (`os.Args` didn't include `-d`): just `r.Run(listenOn)`.
 - **Child of daemon** (env var set): the inherited file descriptors are used. `r.RunFd(3)` is the TCP listener; the goroutine on `RunFd(4)` is the token publisher. FDs 0/1/2 are stdin/out/err.
 
-If you change how the listener is created or how FDs are inherited, the new shape must be replicated in `scripts/build.sh` release flows and the `RunDaemon` setup in `daemon.go`.
+If you change how the listener is created or how FDs are inherited, the new shape must be replicated in the release workflow's build flags (`.github/workflows/release.yml`) and the `RunDaemon` setup in `daemon.go`.
 
 ## Adding a New Endpoint — Checklist
 

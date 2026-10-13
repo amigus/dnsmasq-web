@@ -168,9 +168,8 @@ dnsmasq-web completion zsh | sudo tee /usr/share/zsh/site-functions/_dnsmasq-web
 
 ## Build Modes
 
-- `bash scripts/build.sh debug` writes the host debug binary to `dist/debug/dnsmasq-web`.
-- `bash scripts/build.sh release` writes the supported release binaries to `dist/release/`.
-- `mage` and `mage release` wrap those same entrypoints.
+- `go build -o dnsmasq-web .` writes the host debug binary in the repository root.
+- `mage` builds the shell-helper environment and the `dnsmasq-web-amd64` / `dnsmasq-web-arm64` host binaries in the repository root.
 
 ## Notes
 

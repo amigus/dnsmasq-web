@@ -72,8 +72,8 @@ This file tracks the **intentional** divergences from authoritative Go community
 ## No `Makefile` / Uses `mage`
 
 - **What the community says**: there's no single community standard for build orchestration. `make`, `mage`, `task`, and shell scripts are all common.
-- **What this repo does**: `mage` with `//go:build mage`, with a `scripts/build.sh` underneath. Both are first-class.
-- **Decision**: don't replace `mage` with `make` or vice versa. If you add a build target, add it in both `Magefile.go` and `scripts/build.sh` (or only in `scripts/build.sh` and add a `mage` wrapper that calls it).
+- **What this repo does**: `mage` with `//go:build mage` on `Magefile.go`; release builds run in CI via `.github/workflows/release.yml`.
+- **Decision**: don't replace `mage` with `make` or vice versa. Add build targets in `Magefile.go`.
 
 ## Single-File Server vs. Split Binary
 

@@ -2,10 +2,9 @@
 
 ## Build And Test
 - Prefer `go test ./...` for validation.
-- Use `mage` for the default local debug build, which writes the unified binary to `dist/debug/dnsmasq-web`.
-- Use `bash scripts/build.sh release` or `mage release` for the multi-arch release build. It uses Docker by default so local output matches CI artifact targets and naming.
-- For local release iteration, prefer the reusable prepared image via `bash scripts/build.sh prepare-release-image` or `mage prepareReleaseImage`; local release runs also reuse Docker volumes for the Go module and build caches.
-- This project uses `github.com/mattn/go-sqlite3`, so builds require CGO. The release script bootstraps its toolchains in a container; native debug builds need a working C compiler on the host.
+- Use `go build -o dnsmasq-web .` for the default local debug build in the repository root.
+- Release artifacts are built in CI by `.github/workflows/release.yml` via `go-cross/cgo-actions@v1`; the `mage` targets build the shell-helper environment and host binaries.
+- This project uses `github.com/mattn/go-sqlite3`, so CGO builds require a working C compiler on the host.
 
 ## Architecture
 - `main.go` owns CLI flags, startup validation, Gin setup, and daemon versus foreground execution.
@@ -36,4 +35,4 @@
 
 ## Practical Checks
 - For handler changes, run `go test ./...`.
-- For build or packaging changes, run the relevant `mage` target or `bash scripts/build.sh` mode you modified.
+- For build or packaging changes, run `go build -o dnsmasq-web .` or the relevant `mage` target you modified.

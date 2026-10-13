@@ -51,8 +51,7 @@ Download the appropriate binary from the [releases page](https://github.com/amig
 Or build locally:
 
 ```bash
-bash scripts/build.sh debug    # dist/debug/dnsmasq-web; needs gcc (CGO)
-bash scripts/build.sh release  # dist/release/; uses Docker
+go build -o dnsmasq-web .   # repository root; needs gcc (CGO)
 ```
 
 ## Step 3 — Create the host directory and start the server

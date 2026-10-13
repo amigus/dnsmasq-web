@@ -11,7 +11,7 @@
 
 | File | What it tests | Style |
 |---|---|---|
-| `main.go` (no test) | Startup wiring | Smoke-tested via `dist/debug/dnsmasq-web` |
+| `main.go` (no test) | Startup wiring | Smoke-tested via the built `dnsmasq-web` binary |
 | `daemon_test.go` | `id`, `Listener`, `RunDaemon` | Pure Go + a `GO_WANT_HELPER_PROCESS` helper |
 | `lease_database_test.go` | `/leases`, `/addresses`, `/devices`, `/clients` | `httptest` + `:memory:` SQLite |
 | `lease_database_test_data.go` | Shared `testDatabaseSQL` | Constant string fed into `:memory:` |
@@ -96,7 +96,7 @@ The message after the values is a habit here — keep it, it makes test failures
 
 ## What *Not* to Test
 
-- **Build output**. CI's smoke test (`./dist/debug/dnsmasq-web --help`, `server -V`) covers this; no need to duplicate in unit tests.
+- **Build output**. CI's smoke test (`./dnsmasq-web --help`, `server -V`) covers this; no need to duplicate in unit tests.
 - **The output formatter's exact string output** beyond header presence and a width-scaling case. The reflection-based table is intentionally lossy.
 - **Pure stdlib wrappers**. The `id` function does a tiny bit of name/numeric lookup logic; the existing test covers both branches. Don't write a test for `lookupGroup` in isolation.
 
