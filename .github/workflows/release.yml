@@ -40,7 +40,7 @@ jobs:
           test "$count" -eq 4
 
       - name: Upload Release Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: release-binaries
           path: |
