@@ -7,7 +7,7 @@ toolchain go1.23.12
 require (
 	github.com/gin-gonic/gin v1.11.0
 	github.com/go-resty/resty/v2 v2.17.2
-	github.com/jedib0t/go-pretty/v6 v6.7.8
+	github.com/jedib0t/go-pretty/v6 v6.8.3
 	github.com/seancfoley/ipaddress-go v1.7.0
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
